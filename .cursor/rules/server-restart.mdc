@@ -1,0 +1,41 @@
+---
+description: 修改服务器逻辑后自动重启 Node 服务器
+alwaysApply: true
+---
+
+# 服务器修改后重启
+
+本项目使用 Node.js 权威服务器（`server/index.js`，端口 3000），**无热重载**。修改 `server/` 下任何逻辑后，必须重启服务器才能生效。
+
+## 何时重启
+
+修改以下文件后，**完成代码改动立即重启**：
+
+- `server/` 下所有 `.js` 文件（Game、Room、AntAI、protocol、config 等）
+- 若改动影响启动方式，也包括 `package.json` 中的 scripts
+
+以下改动**不需要**重启服务器：
+
+- `public/` 客户端静态资源（刷新浏览器即可）
+
+## 重启步骤
+
+1. 先检查 `terminals/` 文件夹，确认是否已有服务器在运行
+2. 在后台重启服务器（Windows PowerShell）：
+
+```powershell
+cd "c:\Users\sth\Desktop\AntsDemo"
+$conn = Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($conn) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue }
+Start-Sleep -Milliseconds 800
+node server/index.js
+```
+
+3. 将 `node server/index.js` 设为后台运行（`block_until_ms: 0`），避免阻塞会话
+4. 确认启动成功（无端口占用报错、进程持续运行）
+
+## 原则
+
+- **不要**只改代码不重启——用户无法验证服务器侧改动
+- **不要**假设改动已生效，重启是修改服务器逻辑的必要收尾步骤
+- 若重启失败（如端口仍被占用），排查并解决后再启动

@@ -180,9 +180,6 @@ export class Room {
       case 'use_tool': if (g && p.role === ROLE.SEEKER) g.useTool(msg.tool, msg.x, msg.y); break;
       case 'dev_config': {
         this.pendingDevCfg = msg;
-        // #region agent log
-        fetch('http://127.0.0.1:7839/ingest/a610e76a-a66c-4ae5-8774-a8686212ae81',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9db26e'},body:JSON.stringify({sessionId:'9db26e',location:'Room.js:dev_config',message:'server dev_config received',data:{hasGame:!!g,state:this.state,AI_SPEED_BASE:msg.AI_SPEED_BASE,AI_ANT_COUNT:msg.AI_ANT_COUNT,cached:true},timestamp:Date.now(),hypothesisId:'H2',runId:'post-fix'})}).catch(()=>{});
-        // #endregion
         if (g) g.setDevConfig(msg);
         break;
       }

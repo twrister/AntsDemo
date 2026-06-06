@@ -280,12 +280,6 @@ export class Game {
     }
 
     this._pheroTickCount++;
-    // #region agent log
-    if (this._dbgTick === undefined) this._dbgTick = 0;
-    if (++this._dbgTick % 60 === 0) {
-      fetch('http://127.0.0.1:7839/ingest/a610e76a-a66c-4ae5-8774-a8686212ae81',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9db26e'},body:JSON.stringify({sessionId:'9db26e',location:'Game.js:update',message:'tick devCfg snapshot',data:{devCfg:this.devCfg,aiCount:this.ants.filter(a=>!a.isHider).length,now:this.now},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
-    }
-    // #endregion
   }
 
   _updateHider(ant, dt) {
@@ -466,7 +460,6 @@ export class Game {
    * 支持字段：AI_SPEED_BASE / AI_TURN_SMOOTH / AI_SOCIAL_CHANCE / AI_SPEED / AI_ANT_COUNT / FOOD_COUNT / FOOD_CAPACITY
    */
   setDevConfig(params) {
-    const aiCountBefore = this.ants.filter(a => !a.isHider).length;
     if (params.AI_SPEED_BASE !== undefined) this.devCfg.AI_SPEED_BASE = +params.AI_SPEED_BASE;
     if (params.AI_TURN_SMOOTH !== undefined) this.devCfg.AI_TURN_SMOOTH = +params.AI_TURN_SMOOTH;
     if (params.AI_SOCIAL_CHANCE !== undefined) this.devCfg.AI_SOCIAL_CHANCE = +params.AI_SOCIAL_CHANCE;
@@ -482,10 +475,6 @@ export class Game {
     if (params.FOOD_CAPACITY !== undefined) {
       this._setFoodCapacity(+params.FOOD_CAPACITY);
     }
-    const aiCountAfter = this.ants.filter(a => !a.isHider).length;
-    // #region agent log
-    fetch('http://127.0.0.1:7839/ingest/a610e76a-a66c-4ae5-8774-a8686212ae81',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9db26e'},body:JSON.stringify({sessionId:'9db26e',location:'Game.js:setDevConfig',message:'setDevConfig applied',data:{devCfg:this.devCfg,aiCountBefore,aiCountAfter,paramsAI_SPEED_BASE:params.AI_SPEED_BASE},timestamp:Date.now(),hypothesisId:'H3',runId:'post-fix'})}).catch(()=>{});
-    // #endregion
   }
 
   /**

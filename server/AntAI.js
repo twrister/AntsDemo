@@ -158,15 +158,9 @@ function _updateCarrying(ant, dt, world, cfg) {
 /** 朝 desired 角度平滑转向并前进（转弯限速，保持 GDD 铁律）
  * @param cfg 运行时配置（可覆盖 AI_SPEED_BASE / AI_TURN_SMOOTH）
  */
-let _dbgMoveLogTick = 0;
 function _moveToward(ant, desired, speedMul, dt, instantTurn, cfg = {}) {
   const turnSmooth = cfg.AI_TURN_SMOOTH ?? CONFIG.AI_TURN_SMOOTH;
   const speedBase = cfg.AI_SPEED_BASE ?? CONFIG.AI_SPEED_BASE;
-  // #region agent log
-  if (ant.id === 0 && ++_dbgMoveLogTick % 120 === 0) {
-    fetch('http://127.0.0.1:7839/ingest/a610e76a-a66c-4ae5-8774-a8686212ae81',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9db26e'},body:JSON.stringify({sessionId:'9db26e',location:'AntAI.js:_moveToward',message:'effective AI params',data:{speedBase,turnSmooth,speedMul,cfgKeys:Object.keys(cfg),cfgSpeedBase:cfg.AI_SPEED_BASE,defaultSpeedBase:CONFIG.AI_SPEED_BASE},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
-  }
-  // #endregion
   let diff = clampAngle(desired - ant.angle);
   const maxTurn = (Math.PI / turnSmooth) * dt;
   if (!instantTurn && Math.abs(diff) > maxTurn) {

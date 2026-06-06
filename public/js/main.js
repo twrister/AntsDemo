@@ -106,8 +106,8 @@ restoreDevConfig();
 /** 读取所有滑块当前值，构造 dev_config 消息并发送给服务器 */
 function sendDevConfig() {
   persistDevConfig();
-  // #region agent log
-  const _dbgPayload = {
+  net.send({
+    type: 'dev_config',
     AI_SPEED_BASE: parseFloat($('devSpeedBase').value),
     AI_TURN_SMOOTH: parseFloat($('devTurnSmooth').value),
     AI_SOCIAL_CHANCE: parseFloat($('devSocialChance').value),
@@ -120,12 +120,6 @@ function sendDevConfig() {
     },
     FOOD_COUNT: parseInt($('devFoodCount').value, 10),
     FOOD_CAPACITY: parseInt($('devFoodCapacity').value, 10),
-  };
-  fetch('http://127.0.0.1:7839/ingest/a610e76a-a66c-4ae5-8774-a8686212ae81',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9db26e'},body:JSON.stringify({sessionId:'9db26e',location:'main.js:sendDevConfig',message:'client sendDevConfig',data:{running,willSend:true,payload:_dbgPayload},timestamp:Date.now(),hypothesisId:'H1',runId:'post-fix'})}).catch(()=>{});
-  // #endregion
-  net.send({
-    type: 'dev_config',
-    ..._dbgPayload,
   });
 }
 

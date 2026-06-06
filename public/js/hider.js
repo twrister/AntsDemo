@@ -8,7 +8,7 @@ export class HiderController {
     this.antId = antId;
     this.cam = { x: world.w / 2, y: world.h / 2, zoom: 1.5 };
     this._lastMove = { dx: 0, dy: 0 };
-    this._lastPickup = false;
+    this._lastSprint = false;
     this._sendTimer = 0;
     document.getElementById('hiderHint').classList.remove('hidden');
   }
@@ -25,8 +25,8 @@ export class HiderController {
     const { dx, dy } = self
       ? this.input.hiderMoveVector(self.x, self.y, this.cam)
       : { dx: 0, dy: 0 };
-    // 拾取：按住空格且静止
-    const pickup = !!this.input.keys['Space'];
+    // 冲刺：按住空格触发加速倍率
+    const sprint = !!this.input.keys['Space'];
 
     // 限频发送 (~20Hz) 或在状态变化时立即发送
     this._sendTimer -= dt;
@@ -36,9 +36,9 @@ export class HiderController {
       this._lastMove = { dx, dy };
       this._sendTimer = 0.05;
     }
-    if (pickup !== this._lastPickup) {
-      this.net.send({ type: 'pickup', active: pickup });
-      this._lastPickup = pickup;
+    if (sprint !== this._lastSprint) {
+      this.net.send({ type: 'sprint', active: sprint });
+      this._lastSprint = sprint;
     }
 
     return { cam: this.cam, frozen: snap.frozen, panic: snap.panic };

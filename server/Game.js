@@ -119,7 +119,7 @@ export class Game {
       marked: false,
       suspicious: 0,
       vx: 0, vy: 0,
-      pickupActive: false,
+      sprinting: false,
       pickupProgress: 0,
       inTunnelUntil: 0,
     };
@@ -146,11 +146,11 @@ export class Game {
     if (dx || dy) ant.angle = Math.atan2(dy, dx);
   }
 
-  setHiderPickup(pid, active) {
+  /** 隐藏者冲刺开关：按住空格时叠加加速倍率 */
+  setHiderSprint(pid, active) {
     const ant = this.ants.find(a => a.playerId === pid);
     if (!ant || ant.marked) return;
-    ant.pickupActive = active;
-    if (!active) ant.pickupProgress = 0;
+    ant.sprinting = active;
   }
 
   markAnt(antId) {
@@ -289,8 +289,9 @@ export class Game {
       if (dist2(ant, this.bait) < 60 * 60) ant.suspicious = this.now + 10;
     }
 
+    // 静止时自动尝试拾取标记食物（无需额外按键）
     const moving = ant.vx || ant.vy;
-    if (ant.pickupActive && !moving && !ant.hasMarkedFood) {
+    if (!moving && !ant.hasMarkedFood) {
       const food = this._nearestMarkedFood(ant);
       if (food && dist2(ant, food) < 24 * 24) {
         ant.pickupProgress += dt;
@@ -308,7 +309,11 @@ export class Game {
       ant.pickupProgress = 0;
     }
 
-    const spd = CONFIG.HIDER_SPEED;
+    // 速度叠加：与 AI 共用基准速度（devCfg.AI_SPEED_BASE）× 冲刺 × 搬运
+    const speedBase = this.devCfg.AI_SPEED_BASE ?? CONFIG.AI_SPEED_BASE;
+    const sprintMul = ant.sprinting ? (this.devCfg.AI_SPEED?.sprint ?? CONFIG.AI_SPEED.sprint) : 1.0;
+    const carryMul  = ant.hasMarkedFood ? (this.devCfg.AI_SPEED?.carry  ?? CONFIG.AI_SPEED.carry)  : 1.0;
+    const spd = speedBase * sprintMul * carryMul;
     ant.x += ant.vx * spd * dt;
     ant.y += ant.vy * spd * dt;
     ant.x = Math.max(20, Math.min(CONFIG.WORLD_W - 20, ant.x));

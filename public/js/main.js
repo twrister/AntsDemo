@@ -43,7 +43,7 @@ const DEV_DEFAULTS = {
   AI_SPEED_BASE: 60,
   AI_TURN_SMOOTH: 0.3,
   AI_SOCIAL_CHANCE: 0.05,
-  AI_SPEED: { wander: 0.6, forage: 1.0, carry: 0.8, flee: 1.4 },
+  AI_SPEED: { sprint: 1.5, carry: 0.8 },
   FOOD_COUNT: 5,
   FOOD_CAPACITY: 60,
 };
@@ -58,10 +58,8 @@ function persistDevConfig() {
     AI_TURN_SMOOTH: parseFloat($('devTurnSmooth').value),
     AI_SOCIAL_CHANCE: parseFloat($('devSocialChance').value),
     AI_SPEED: {
-      wander: parseFloat($('devSpeedWander').value),
-      forage: parseFloat($('devSpeedForage').value),
+      sprint: parseFloat($('devSpeedSprint').value),
       carry: parseFloat($('devSpeedCarry').value),
-      flee: parseFloat($('devSpeedFlee').value),
     },
     FOOD_COUNT: parseInt($('devFoodCount').value, 10),
     FOOD_CAPACITY: parseInt($('devFoodCapacity').value, 10),
@@ -86,14 +84,10 @@ function restoreDevConfig() {
   $('devTurnSmoothVal').textContent = c.AI_TURN_SMOOTH.toFixed(2);
   $('devSocialChance').value = c.AI_SOCIAL_CHANCE;
   $('devSocialChanceVal').textContent = c.AI_SOCIAL_CHANCE.toFixed(3);
-  $('devSpeedWander').value = c.AI_SPEED.wander;
-  $('devSpeedWanderVal').textContent = c.AI_SPEED.wander.toFixed(2);
-  $('devSpeedForage').value = c.AI_SPEED.forage;
-  $('devSpeedForageVal').textContent = c.AI_SPEED.forage.toFixed(2);
+  $('devSpeedSprint').value = c.AI_SPEED.sprint;
+  $('devSpeedSprintVal').textContent = c.AI_SPEED.sprint.toFixed(2);
   $('devSpeedCarry').value = c.AI_SPEED.carry;
   $('devSpeedCarryVal').textContent = c.AI_SPEED.carry.toFixed(2);
-  $('devSpeedFlee').value = c.AI_SPEED.flee;
-  $('devSpeedFleeVal').textContent = c.AI_SPEED.flee.toFixed(2);
   $('devFoodCount').value = c.FOOD_COUNT;
   $('devFoodCountVal').textContent = c.FOOD_COUNT;
   $('devFoodCapacity').value = c.FOOD_CAPACITY;
@@ -113,10 +107,8 @@ function sendDevConfig() {
     AI_SOCIAL_CHANCE: parseFloat($('devSocialChance').value),
     AI_ANT_COUNT: parseInt($('devAntCount').value, 10),
     AI_SPEED: {
-      wander: parseFloat($('devSpeedWander').value),
-      forage: parseFloat($('devSpeedForage').value),
+      sprint: parseFloat($('devSpeedSprint').value),
       carry: parseFloat($('devSpeedCarry').value),
-      flee: parseFloat($('devSpeedFlee').value),
     },
     FOOD_COUNT: parseInt($('devFoodCount').value, 10),
     FOOD_CAPACITY: parseInt($('devFoodCapacity').value, 10),
@@ -140,10 +132,8 @@ bindSlider('devAntCount', 'devAntCountVal', 0);
 bindSlider('devSpeedBase', 'devSpeedBaseVal', 0);
 bindSlider('devTurnSmooth', 'devTurnSmoothVal', 2);
 bindSlider('devSocialChance', 'devSocialChanceVal', 3);
-bindSlider('devSpeedWander', 'devSpeedWanderVal', 2);
-bindSlider('devSpeedForage', 'devSpeedForageVal', 2);
+bindSlider('devSpeedSprint', 'devSpeedSprintVal', 2);
 bindSlider('devSpeedCarry', 'devSpeedCarryVal', 2);
-bindSlider('devSpeedFlee', 'devSpeedFleeVal', 2);
 bindSlider('devFoodCount', 'devFoodCountVal', 0);
 bindSlider('devFoodCapacity', 'devFoodCapacityVal', 0);
 
@@ -158,14 +148,10 @@ $('devReset').addEventListener('click', () => {
   $('devTurnSmoothVal').textContent = DEV_DEFAULTS.AI_TURN_SMOOTH.toFixed(2);
   $('devSocialChance').value = DEV_DEFAULTS.AI_SOCIAL_CHANCE;
   $('devSocialChanceVal').textContent = DEV_DEFAULTS.AI_SOCIAL_CHANCE.toFixed(3);
-  $('devSpeedWander').value = DEV_DEFAULTS.AI_SPEED.wander;
-  $('devSpeedWanderVal').textContent = DEV_DEFAULTS.AI_SPEED.wander.toFixed(2);
-  $('devSpeedForage').value = DEV_DEFAULTS.AI_SPEED.forage;
-  $('devSpeedForageVal').textContent = DEV_DEFAULTS.AI_SPEED.forage.toFixed(2);
+  $('devSpeedSprint').value = DEV_DEFAULTS.AI_SPEED.sprint;
+  $('devSpeedSprintVal').textContent = DEV_DEFAULTS.AI_SPEED.sprint.toFixed(2);
   $('devSpeedCarry').value = DEV_DEFAULTS.AI_SPEED.carry;
   $('devSpeedCarryVal').textContent = DEV_DEFAULTS.AI_SPEED.carry.toFixed(2);
-  $('devSpeedFlee').value = DEV_DEFAULTS.AI_SPEED.flee;
-  $('devSpeedFleeVal').textContent = DEV_DEFAULTS.AI_SPEED.flee.toFixed(2);
   $('devFoodCount').value = DEV_DEFAULTS.FOOD_COUNT;
   $('devFoodCountVal').textContent = DEV_DEFAULTS.FOOD_COUNT;
   $('devFoodCapacity').value = DEV_DEFAULTS.FOOD_CAPACITY;

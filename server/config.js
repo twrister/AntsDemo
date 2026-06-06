@@ -44,10 +44,10 @@ export const CONFIG = {
   AI_TURN_SMOOTH: 0.3,      // 转弯减速曲线 (秒)
   AI_SOCIAL_CHANCE: 0.05,   // 空闲触发社交概率
   AI_SPEED_BASE: 60,        // 基准速度 (像素/秒)
-  AI_SPEED: { wander: 0.6, forage: 1.0, carry: 0.8, flee: 1.4, social: 0 },
+  /** 速度叠加倍率：最终速度 = base × (加速中 ? sprint : 1.0) × (搬运中 ? carry : 1.0) */
+  AI_SPEED: { sprint: 1.5, carry: 0.8 },
 
-  // 玩家移动
-  HIDER_SPEED: 60,          // 隐藏者基准移动速度，与 AI 基准一致以便伪装
+  // 玩家移动基准速度与 AI_SPEED_BASE 共用，见 Game._updateHider / AntAI._moveToward
 
   // ---------- 信息素场（stigmergy）----------
   PHEROMONE: {

@@ -175,7 +175,7 @@ export class Room {
         break;
       case 'restart': if (this.state === 'ended') this.restart(); break;
       case 'move': if (g && p.role === ROLE.HIDER) g.setHiderMove(id, msg.dx || 0, msg.dy || 0); break;
-      case 'pickup': if (g && p.role === ROLE.HIDER) g.setHiderPickup(id, !!msg.active); break;
+      case 'sprint': if (g && p.role === ROLE.HIDER) g.setHiderSprint(id, !!msg.active); break;
       case 'mark': if (g && p.role === ROLE.SEEKER) g.markAnt(msg.antId); break;
       case 'use_tool': if (g && p.role === ROLE.SEEKER) g.useTool(msg.tool, msg.x, msg.y); break;
       case 'dev_config': {

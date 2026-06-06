@@ -44,12 +44,12 @@ export function updateAI(ant, dt, world) {
 
   // 合并运行时配置（开发者工具调参）
   const cfg = world.cfg || {};
-  const fleeMul = cfg.AI_SPEED?.flee ?? CONFIG.AI_SPEED.flee;
+  const sprintMul = cfg.AI_SPEED?.sprint ?? CONFIG.AI_SPEED.sprint;
 
-  // --- flee：高速随机，绝不回巢，不沉积信息素 ---
+  // --- flee：高速随机，绝不回巢，不沉积信息素（使用加速倍率）---
   if (ant.state === 'flee') {
     ant.stateTimer -= dt;
-    _moveToward(ant, ant.targetAngle, fleeMul, dt, true, cfg);
+    _moveToward(ant, ant.targetAngle, sprintMul, dt, true, cfg);
     if (ant.stateTimer <= 0) {
       ant.state = ant.carrying ? 'carrying' : 'searching';
     }
@@ -98,12 +98,8 @@ function _updateSearching(ant, dt, world, cfg) {
   // 随机抖动叠加（保持探索性，防止全员走同一条路）
   desired += rand(-PHR.wanderJitter * 0.3, PHR.wanderJitter * 0.3);
 
-  // 有信息素引导时用 forage 速度（跟踪路径），无信号时用 wander 速度（探索性游走）
-  const hasPhero = sL > 0 || sC > 0 || sR > 0;
-  const speedMul = hasPhero
-    ? (cfg.AI_SPEED?.forage ?? CONFIG.AI_SPEED.forage)
-    : (cfg.AI_SPEED?.wander ?? CONFIG.AI_SPEED.wander);
-  _moveToward(ant, desired, speedMul, dt, false, cfg);
+  // 搜寻态：基准速度 × 1.0（无额外倍率）
+  _moveToward(ant, desired, 1.0, dt, false, cfg);
 
   // 沉积 toHome（channel 1），强度随离巢时间指数衰减（越靠食源越弱）
   const depositH = PHR.DEPOSIT_HOME * Math.exp(-ant.tripTime / PHR.TAU) * dt;
@@ -134,7 +130,7 @@ function _updateCarrying(ant, dt, world, cfg) {
   const phero = world.phero;
   const nest = world.nest;
 
-  // 朝巢穴方向走（转弯限速，满足 GDD 铁律）
+  // 朝巢穴方向走（转弯限速）；搬运倍率 carry 使速度慢于空载
   const desired = Math.atan2(nest.y - ant.y, nest.x - ant.x);
   const carryMul = cfg.AI_SPEED?.carry ?? CONFIG.AI_SPEED.carry;
   _moveToward(ant, desired, carryMul, dt, false, cfg);

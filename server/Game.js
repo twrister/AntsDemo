@@ -30,6 +30,7 @@ export class Game {
     this.frozenUntil = 0;
     this.effects = {};
     this.bait = null;
+    this.lightBeam = null; // 强光照射：{ x, y, until }
 
     this.hiderCount = hiderPlayers.length;
     this.quota = CONFIG.foodQuota(this.hiderCount);
@@ -156,10 +157,6 @@ export class Game {
     }
 
     switch (tool) {
-      case 'panic':
-        for (const a of this.ants) if (!a.isHider) triggerFlee(a, def.duration);
-        this.effects.panic = this.now + def.duration;
-        break;
       case 'freeze':
         this.frozenUntil = this.now + def.duration;
         break;
@@ -168,6 +165,44 @@ export class Game {
         break;
     }
     this.events.push({ t: 'tool', tool, x, y });
+  }
+
+  /**
+   * 持续照射类工具（强光照射）：点击开始后更新光束位置，自动持续至时长结束。
+   */
+  setToolBeam(tool, x, y, active) {
+    if (this.over || tool !== 'panic') return;
+    const def = CONFIG.TOOLS.panic;
+
+    if (active) {
+      if (!this.lightBeam) {
+        if (!this.debugMode) {
+          if (this.now < this.globalCooldownUntil || this.now < this.lockUntil) return;
+          this.globalCooldownUntil = this.now + def.cd;
+        }
+        this.lightBeam = { x, y, until: this.now + def.duration };
+        this.events.push({ t: 'tool', tool, x, y });
+      } else {
+        this.lightBeam.x = x;
+        this.lightBeam.y = y;
+      }
+    } else {
+      this.lightBeam = null;
+    }
+  }
+
+  /** 强光范围内触发 AI 蚂蚁逃离光源 */
+  _applyLightPanic() {
+    if (!this.lightBeam || this.now >= this.lightBeam.until) {
+      this.lightBeam = null;
+      return;
+    }
+    const def = CONFIG.TOOLS.panic;
+    const r2 = def.radius * def.radius;
+    const src = { x: this.lightBeam.x, y: this.lightBeam.y };
+    for (const a of this.ants) {
+      if (!a.isHider && dist2(a, src) < r2) triggerFlee(a, 0.4, src);
+    }
   }
 
   /**
@@ -251,6 +286,7 @@ export class Game {
 
     // 信息素蒸发（负反馈，每帧执行）
     this.phero.evaporate(dt);
+    this._applyLightPanic();
 
     // 食物堆重生检查
     for (const s of this.foodSources) {
@@ -378,7 +414,9 @@ export class Game {
       lockLeft: this.debugMode ? 0 : Math.max(0, +(this.lockUntil - this.now).toFixed(1)),
       debugMode: this.debugMode,
       frozen: this.frozenUntil > this.now,
-      panic: this.now < (this.effects.panic || 0),
+      lightBeam: this.lightBeam && this.now < this.lightBeam.until
+        ? { x: Math.round(this.lightBeam.x), y: Math.round(this.lightBeam.y), radius: CONFIG.TOOLS.panic.radius }
+        : null,
     };
   }
 

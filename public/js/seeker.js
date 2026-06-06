@@ -2,6 +2,7 @@
 import { computeFitZoom } from './const.js';
 
 const GLOBAL_TOOLS = ['freeze'];  // 立即生效(全局)
+const BEAM_TOOLS = ['panic'];   // 点击左键开始，自动持续照射
 
 export class SeekerController {
   constructor({ canvas, input, net, world }) {
@@ -15,6 +16,11 @@ export class SeekerController {
     this.armedTool = null;        // 已选中待施放的瞄准类工具
     this.toolKeys = Object.keys(world.tools); // 工具顺序
     this.lastSnap = null;
+
+    this.beamActive = false;
+    this._localBeam = null;
+    this._beamSendTimer = 0;
+    this._beamConfirmed = false; // 服务器已确认光束，避免首帧误判结束
 
     this._setupDrag();
     this._buildToolbar();
@@ -74,6 +80,10 @@ export class SeekerController {
       if (e.button !== 0) return;
       const wp = this.screenToWorld(m.x, m.y);
       if (this.armedTool) {
+        if (BEAM_TOOLS.includes(this.armedTool)) {
+          this._startBeam(wp);
+          return;
+        }
         this.net.send({ type: 'use_tool', tool: this.armedTool, x: wp.x, y: wp.y });
         this.armedTool = null;
         this._refreshArmed();
@@ -83,6 +93,19 @@ export class SeekerController {
       const ant = this._antAt(wp.x, wp.y);
       if (ant) this.net.send({ type: 'mark', antId: ant.id });
     });
+  }
+
+  /** 强光照射：点击地图开始，自动持续至时长结束 */
+  _startBeam(wp) {
+    if (this.beamActive) return;
+    if (!this.debugMode && this.lastSnap && (this.lastSnap.cooldownLeft > 0 || this.lastSnap.lockLeft > 0)) return;
+    this.beamActive = true;
+    this._beamConfirmed = false;
+    this._beamSendTimer = 0;
+    this._localBeam = wp;
+    this.net.send({ type: 'tool_beam', tool: 'panic', x: wp.x, y: wp.y, active: true });
+    this.armedTool = null;
+    this._refreshArmed();
   }
 
   _setupHotkeys() {
@@ -143,10 +166,30 @@ export class SeekerController {
   }
 
   // 每帧更新：工具冷却 UI，并返回渲染参数
-  update(snap) {
+  update(snap, dt = 0) {
     this.lastSnap = snap;
     this.cam.zoom = this.baseZoom;
     this._clampCam();
+
+    // 照射中：跟随鼠标更新光束位置（限频 ~10Hz 同步服务器）
+    if (this.beamActive) {
+      const wp = this.screenToWorld(this.input.mouse.x, this.input.mouse.y);
+      this._localBeam = wp;
+      this._beamSendTimer -= dt;
+      if (this._beamSendTimer <= 0) {
+        this.net.send({ type: 'tool_beam', tool: 'panic', x: wp.x, y: wp.y, active: true });
+        this._beamSendTimer = 0.1;
+      }
+      if (snap.lightBeam) this._beamConfirmed = true;
+      // 服务器时长耗尽后自动结束（需先收到确认，避免首帧误判）
+      if (this._beamConfirmed && !snap.lightBeam) {
+        this.beamActive = false;
+        this._localBeam = null;
+        this._beamConfirmed = false;
+        this.armedTool = null;
+        this._refreshArmed();
+      }
+    }
 
     // 冷却 / 锁死遮罩（调试模式无限制）
     const blocked = !this.debugMode && (snap.cooldownLeft > 0 || snap.lockLeft > 0);
@@ -156,14 +199,24 @@ export class SeekerController {
       if (blocked) { cover.classList.remove('hidden'); cover.textContent = label; }
       else cover.classList.add('hidden');
     }
-    if (blocked) { this.armedTool = null; this._refreshArmed(); }
+    if (blocked) {
+      this.armedTool = null;
+      this.beamActive = false;
+      this._localBeam = null;
+      this._refreshArmed();
+    }
+
+    const panicDef = this.world.tools.panic;
+    const lightBeam = this.beamActive && this._localBeam
+      ? { x: this._localBeam.x, y: this._localBeam.y, radius: panicDef.radius || 120 }
+      : snap.lightBeam;
 
     const viewRadius = Math.min(this.canvas.width, this.canvas.height) * this.world.viewRatio;
     return {
       cam: this.cam,
       viewRadius,
       frozen: snap.frozen,
-      panic: snap.panic,
+      lightBeam,
     };
   }
 }

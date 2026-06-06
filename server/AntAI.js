@@ -38,11 +38,22 @@ export function depositTrail(ant, dt, phero) {
   }
 }
 
-/** 触发逃跑（恐慌信息素 / 环境威胁），兼容 Game.js 调用 */
-export function triggerFlee(ant, duration) {
+/**
+ * 触发逃跑（强光照射 / 环境威胁），兼容 Game.js 调用。
+ * @param fleeFrom 威胁源坐标；提供时蚂蚁朝远离该点的方向逃离，否则随机乱窜
+ */
+export function triggerFlee(ant, duration, fleeFrom) {
   ant.state = 'flee';
   ant.stateTimer = duration;
-  ant.targetAngle = rand(-Math.PI, Math.PI);
+  if (fleeFrom) {
+    const dx = ant.x - fleeFrom.x;
+    const dy = ant.y - fleeFrom.y;
+    ant.targetAngle = Math.hypot(dx, dy) > 1
+      ? Math.atan2(dy, dx)
+      : rand(-Math.PI, Math.PI);
+  } else {
+    ant.targetAngle = rand(-Math.PI, Math.PI);
+  }
 }
 
 /**
@@ -58,7 +69,7 @@ export function updateAI(ant, dt, world) {
   const cfg = world.cfg || {};
   const sprintMul = cfg.AI_SPEED?.sprint ?? CONFIG.AI_SPEED.sprint;
 
-  // --- flee：高速随机，绝不回巢，不沉积信息素（使用加速倍率）---
+  // --- flee：高速逃离威胁方向，绝不回巢，不沉积信息素（使用加速倍率）---
   if (ant.state === 'flee') {
     ant.stateTimer -= dt;
     _moveToward(ant, ant.targetAngle, sprintMul, dt, true, cfg);

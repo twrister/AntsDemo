@@ -20,7 +20,7 @@ export const CONFIG = {
 
   // 工具 (全局冷却，单位秒)
   TOOLS: {
-    panic:   { name: '恐慌信息素', cd: 30, duration: 4,  desc: 'AI 蚂蚁惊慌乱窜，隐藏者不受影响，可借此找出行为异常者。点击地图施放，持续 4 秒。' },
+    panic:   { name: '强光照射', cd: 30, duration: 4, radius: 120, desc: '在鼠标位置投射强光，范围内 AI 蚂蚁逃离光源，隐藏者不受影响。选中后点击地图开始照射，自动持续 4 秒。' },
     bait:    { name: '诱饵食屑',   cd: 25, duration: 10, desc: '放置诱饵，靠近的隐藏者会被标为可疑（?）。点击地图施放，持续 10 秒。' },
     freeze:  { name: '群体冻结',   cd: 60, duration: 2,  desc: '冻结全体蚂蚁移动，便于仔细观察外观破绽。立即生效，持续 2 秒。' },
   },

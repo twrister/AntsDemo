@@ -184,6 +184,7 @@ export class Room {
       case 'sprint': if (g && p.role === ROLE.HIDER) g.setHiderSprint(id, !!msg.active); break;
       case 'mark': if (g && p.role === ROLE.SEEKER) g.markAnt(msg.antId); break;
       case 'use_tool': if (g && p.role === ROLE.SEEKER) g.useTool(msg.tool, msg.x, msg.y); break;
+      case 'tool_beam': if (g && p.role === ROLE.SEEKER) g.setToolBeam(msg.tool, msg.x, msg.y, !!msg.active); break;
       case 'dev_config': {
         this.pendingDevCfg = msg;
         if (g) g.setDevConfig(msg);

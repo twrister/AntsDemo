@@ -41,6 +41,6 @@ export class HiderController {
       this._lastSprint = sprint;
     }
 
-    return { cam: this.cam, frozen: snap.frozen, panic: snap.panic };
+    return { cam: this.cam, frozen: snap.frozen, lightBeam: snap.lightBeam };
   }
 }

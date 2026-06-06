@@ -20,7 +20,7 @@ export class Renderer {
    * 渲染一帧。
    * @param snap 插值后的世界快照
    * @param cam  镜头 { x, y, zoom } —— 世界坐标中心点
-   * @param opts { role, world, time, viewRadius, frozen, panic }
+   * @param opts { role, world, time, viewRadius, frozen, lightBeam }
    */
   draw(snap, cam, opts) {
     const ctx = this.ctx;
@@ -43,6 +43,7 @@ export class Renderer {
     this._drawNest(ctx, snap.nest);
     this._drawNormalFood(ctx, snap.normalFood);
     if (snap.bait) this._drawBait(ctx, snap.bait, opts.time);
+    if (opts.lightBeam) this._drawLightBeam(ctx, opts.lightBeam, opts.time);
 
     for (const ant of snap.ants) {
       this._drawAnt(ctx, ant, opts);
@@ -52,7 +53,6 @@ export class Renderer {
 
     // 屏幕空间叠层
     if (opts.role === ROLE.SEEKER && opts.viewRadius) this._drawVignette(ctx, W, H, opts.viewRadius);
-    if (opts.panic) this._tint(ctx, W, H, 'rgba(214,84,60,0.10)');
     if (opts.frozen) this._tint(ctx, W, H, 'rgba(120,180,255,0.14)');
   }
 
@@ -145,6 +145,31 @@ export class Renderer {
     ctx.strokeStyle = `rgba(224,169,59,${0.2 + pulse * 0.3})`; ctx.lineWidth = 2; ctx.stroke();
     ctx.beginPath(); ctx.arc(bait.x, bait.y, 6, 0, Math.PI * 2);
     ctx.fillStyle = '#e0a93b'; ctx.fill();
+  }
+
+  /** 绘制强光照射：鼠标位置的径向光晕 */
+  _drawLightBeam(ctx, beam, time) {
+    const pulse = 0.85 + 0.15 * Math.sin(time / 80);
+    const r = beam.radius || 120;
+    const grad = ctx.createRadialGradient(beam.x, beam.y, 0, beam.x, beam.y, r);
+    grad.addColorStop(0, `rgba(255,248,200,${(0.55 * pulse).toFixed(3)})`);
+    grad.addColorStop(0.35, `rgba(255,230,120,${(0.28 * pulse).toFixed(3)})`);
+    grad.addColorStop(0.7, `rgba(255,200,80,${(0.08 * pulse).toFixed(3)})`);
+    grad.addColorStop(1, 'rgba(255,200,80,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(beam.x, beam.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    // 光芯
+    ctx.beginPath();
+    ctx.arc(beam.x, beam.y, 14, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,220,${(0.75 * pulse).toFixed(3)})`;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(beam.x, beam.y, r, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,240,180,${(0.35 * pulse).toFixed(3)})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
   }
 
   // 核心：按特征绘制一只蚂蚁

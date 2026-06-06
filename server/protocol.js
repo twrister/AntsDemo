@@ -8,6 +8,7 @@ export const C2S = {
   PICKUP: 'pickup',       // 隐藏者开始/停止引导拾取 { active }
   MARK: 'mark',           // 搜寻者标记蚂蚁 { antId }
   USE_TOOL: 'use_tool',   // 搜寻者使用工具 { tool, x, y }
+  TOOL_BEAM: 'tool_beam', // 搜寻者持续照射类工具 { tool, x, y, active }
   RESTART: 'restart',     // 结算后重开
   SOLO_START: 'solo_start', // 单机调试 { role: 'seeker' | 'hider' }
 };

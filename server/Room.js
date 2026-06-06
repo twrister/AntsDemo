@@ -112,13 +112,13 @@ export class Room {
         hiders.push({ id: `bot_${botIdx++}`, bot: true });
       }
     }
-    this._beginPlaying(hiders);
+    this._beginPlaying(hiders, { debugMode: true });
   }
 
   // 启动对局循环并通知各玩家
-  _beginPlaying(hiders) {
+  _beginPlaying(hiders, opts = {}) {
     this.state = 'playing';
-    this.game = new Game(hiders);
+    this.game = new Game(hiders, opts);
     // 开局立即套用已缓存的调试参数，避免首帧仍用默认 AI 数量/速度
     if (this.pendingDevCfg) this.game.setDevConfig(this.pendingDevCfg);
 
@@ -127,7 +127,13 @@ export class Room {
       this.send(p, {
         type: S2C.START,
         role: p.role,
-        world: { w: CONFIG.WORLD_W, h: CONFIG.WORLD_H, viewRatio: CONFIG.SEEKER_VIEW_RATIO, tools: CONFIG.TOOLS },
+        world: {
+          w: CONFIG.WORLD_W,
+          h: CONFIG.WORLD_H,
+          viewRatio: CONFIG.SEEKER_VIEW_RATIO,
+          tools: CONFIG.TOOLS,
+          debugMode: !!opts.debugMode,
+        },
         antId: ant ? ant.id : null,
       });
     }

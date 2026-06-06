@@ -10,7 +10,8 @@ function dist2(a, b) { const dx = a.x - b.x, dy = a.y - b.y; return dx * dx + dy
 
 export class Game {
   /** @param hiderPlayers 隐藏者描述数组：{ id, bot } */
-  constructor(hiderPlayers) {
+  /** @param opts.debugMode 单机调试：搜寻者工具无全局 CD、误标记不锁技能 */
+  constructor(hiderPlayers, opts = {}) {
     this.now = 0;
     this.timeLeft = CONFIG.MATCH_DURATION;
     this.ants = [];
@@ -18,7 +19,6 @@ export class Game {
     this.foodSources = [];
     this.nest = { x: CONFIG.WORLD_W * 0.5, y: 80 };
     this.tunnels = [];
-    this.thickets = [];
     this.events = [];
 
     // 信息素场
@@ -31,8 +31,6 @@ export class Game {
     this.frozenUntil = 0;
     this.effects = {};
     this.bait = null;
-    this.trackedAntId = null;
-    this.trackedUntil = 0;
 
     this.hiderCount = hiderPlayers.length;
     this.quota = CONFIG.foodQuota(this.hiderCount);
@@ -43,6 +41,7 @@ export class Game {
 
     // 开发者工具：运行时 AI 参数覆盖（不影响 config.js 默认值）
     this.devCfg = {};
+    this.debugMode = !!opts.debugMode;
 
     this._buildWorld(hiderPlayers);
   }
@@ -54,12 +53,6 @@ export class Game {
       { id: 2, x: 1360, y: 300, link: 3 },
       { id: 3, x: 240, y: 900, link: 2 },
     ];
-    this.thickets = [
-      { x: 800, y: 600, r: 130 },
-      { x: 400, y: 800, r: 90 },
-      { x: 1200, y: 450, r: 100 },
-    ];
-
     // 可枯竭食物堆：分散在地图各处，远离巢穴
     this._spawnFoodSources(CONFIG.FOOD.count);
 
@@ -142,7 +135,7 @@ export class Game {
   }
 
   markAnt(antId) {
-    if (this.over || this.now < this.lockUntil) return;
+    if (this.over || (!this.debugMode && this.now < this.lockUntil)) return;
     const ant = this.ants.find(a => a.id === antId);
     if (!ant || ant.marked) return;
     if (ant.isHider) {
@@ -156,7 +149,7 @@ export class Game {
       this.events.push({ t: 'mark_hit', x: ant.x, y: ant.y });
       this._checkWin();
     } else {
-      this.lockUntil = this.now + CONFIG.MISMARK_PENALTY;
+      if (!this.debugMode) this.lockUntil = this.now + CONFIG.MISMARK_PENALTY;
       this.events.push({ t: 'mark_miss', x: ant.x, y: ant.y, antId });
     }
   }
@@ -165,8 +158,10 @@ export class Game {
     if (this.over) return;
     const def = CONFIG.TOOLS[tool];
     if (!def) return;
-    if (this.now < this.globalCooldownUntil || this.now < this.lockUntil) return;
-    this.globalCooldownUntil = this.now + def.cd;
+    if (!this.debugMode) {
+      if (this.now < this.globalCooldownUntil || this.now < this.lockUntil) return;
+      this.globalCooldownUntil = this.now + def.cd;
+    }
 
     switch (tool) {
       case 'panic':
@@ -176,25 +171,9 @@ export class Game {
       case 'freeze':
         this.frozenUntil = this.now + def.duration;
         break;
-      case 'thermal':
-        this.effects.thermal = this.now + def.duration;
-        break;
-      case 'magnify':
-        this.effects.magnify = this.now + def.duration;
-        break;
       case 'bait':
         this.bait = { x, y, until: this.now + def.duration };
         break;
-      case 'track': {
-        let best = null, bd = Infinity;
-        for (const a of this.ants) {
-          if (a.marked) continue;
-          const d = dist2(a, { x, y });
-          if (d < bd) { bd = d; best = a; }
-        }
-        if (best) { this.trackedAntId = best.id; this.trackedUntil = this.now + def.duration; }
-        break;
-      }
     }
     this.events.push({ t: 'tool', tool, x, y });
   }
@@ -353,10 +332,7 @@ export class Game {
 
   // ---------- 快照 ----------
   snapshot(role, viewerPid) {
-    const thermalOn = this.now < (this.effects.thermal || 0);
     const ants = this.ants.map(a => {
-      const inThicket = this.thickets.some(t => dist2(a, t) < t.r * t.r);
-      const hidden = role === ROLE.SEEKER && inThicket && !thermalOn;
       return {
         id: a.id,
         x: Math.round(a.x), y: Math.round(a.y),
@@ -365,8 +341,6 @@ export class Game {
         marked: a.marked,
         carrying: a.carrying,
         suspicious: this.now < a.suspicious,
-        tracked: a.id === this.trackedAntId && this.now < this.trackedUntil,
-        hidden,
         isSelf: role === ROLE.HIDER && a.playerId === viewerPid,
         pickup: role === ROLE.HIDER && a.playerId === viewerPid ? +a.pickupProgress.toFixed(2) : 0,
         deposit: role === ROLE.HIDER && a.playerId === viewerPid ? +a.depositProgress.toFixed(2) : 0,
@@ -405,16 +379,14 @@ export class Game {
       foodActionTime: CONFIG.FOOD_ACTION_TIME,
       nest: this.nest,
       tunnels: this.tunnels,
-      thickets: this.thickets,
       bait: this.bait && this.now < this.bait.until ? { x: this.bait.x, y: this.bait.y } : null,
       score: this.score,
       quota: this.quota,
       phero: pheroSnap,  // null 时客户端复用上一帧缓存
-      cooldownLeft: Math.max(0, +(this.globalCooldownUntil - this.now).toFixed(1)),
-      lockLeft: Math.max(0, +(this.lockUntil - this.now).toFixed(1)),
+      cooldownLeft: this.debugMode ? 0 : Math.max(0, +(this.globalCooldownUntil - this.now).toFixed(1)),
+      lockLeft: this.debugMode ? 0 : Math.max(0, +(this.lockUntil - this.now).toFixed(1)),
+      debugMode: this.debugMode,
       frozen: this.frozenUntil > this.now,
-      thermal: thermalOn,
-      magnify: this.now < (this.effects.magnify || 0),
       panic: this.now < (this.effects.panic || 0),
     };
   }

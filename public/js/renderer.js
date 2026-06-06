@@ -20,7 +20,7 @@ export class Renderer {
    * 渲染一帧。
    * @param snap 插值后的世界快照
    * @param cam  镜头 { x, y, zoom } —— 世界坐标中心点
-   * @param opts { role, world, time, viewRadius, magnify, thermal, frozen, panic }
+   * @param opts { role, world, time, viewRadius, frozen, panic }
    */
   draw(snap, cam, opts) {
     const ctx = this.ctx;
@@ -40,14 +40,12 @@ export class Renderer {
     this._drawGround(ctx, opts.world);
     // 信息素轨迹绘制在地面之上、蚂蚁之下，呈现搬运通道
     if (this._cachedPhero && opts.showPheromone !== false) this._drawPheromone(ctx, this._cachedPhero);
-    this._drawThickets(ctx, snap.thickets, opts);
     this._drawTunnels(ctx, snap.tunnels);
     this._drawNest(ctx, snap.nest);
     this._drawNormalFood(ctx, snap.normalFood);
     if (snap.bait) this._drawBait(ctx, snap.bait, opts.time);
 
     for (const ant of snap.ants) {
-      if (ant.hidden) { this._drawHiddenBlip(ctx, ant); continue; }
       this._drawAnt(ctx, ant, opts);
     }
 
@@ -57,7 +55,6 @@ export class Renderer {
     if (opts.role === ROLE.SEEKER && opts.viewRadius) this._drawVignette(ctx, W, H, opts.viewRadius);
     if (opts.panic) this._tint(ctx, W, H, 'rgba(214,84,60,0.10)');
     if (opts.frozen) this._tint(ctx, W, H, 'rgba(120,180,255,0.14)');
-    if (opts.thermal) this._tint(ctx, W, H, 'rgba(255,120,40,0.10)');
   }
 
   _drawGround(ctx, world) {
@@ -72,18 +69,6 @@ export class Renderer {
     ctx.strokeStyle = '#4a3d28';
     ctx.lineWidth = 4;
     ctx.strokeRect(0, 0, world.w, world.h);
-  }
-
-  _drawThickets(ctx, thickets, opts) {
-    if (!thickets) return;
-    for (const t of thickets) {
-      ctx.beginPath();
-      ctx.arc(t.x, t.y, t.r, 0, Math.PI * 2);
-      ctx.fillStyle = opts.thermal ? 'rgba(60,90,40,0.55)' : 'rgba(40,70,30,0.85)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(90,140,70,0.6)';
-      ctx.lineWidth = 2; ctx.stroke();
-    }
   }
 
   _drawTunnels(ctx, tunnels) {
@@ -174,13 +159,6 @@ export class Renderer {
     ctx.fillStyle = '#e0a93b'; ctx.fill();
   }
 
-  _drawHiddenBlip(ctx, ant) {
-    // 荆棘丛内信号丢失：只显示模糊剪影
-    ctx.beginPath();
-    ctx.arc(ant.x, ant.y, 6, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fill();
-  }
-
   // 核心：按特征绘制一只蚂蚁
   _drawAnt(ctx, ant, opts) {
     const tr = ant.traits;
@@ -209,8 +187,6 @@ export class Renderer {
     let body = `hsl(${baseHue}, 45%, ${light}%)`;
     if (ant.marked) body = '#555';
     if (ant.isSelf) body = '#6fc36f';
-    if (ant.tracked) body = '#c779ff';
-
     // 腿
     ctx.strokeStyle = ant.marked ? '#444' : `hsl(${baseHue},40%,${light - 8}%)`;
     ctx.lineWidth = 1.4;

@@ -1,9 +1,7 @@
 // 搜寻者控制器：镜头平移、视野半径、点击标记、工具使用与全局冷却。
 import { computeFitZoom } from './const.js';
 
-const GLOBAL_TOOLS = ['freeze', 'thermal', 'magnify'];      // 立即生效(全局)
-const AIMED_TOOLS = ['panic', 'bait', 'track'];             // 需选点
-const MAGNIFY_FACTOR = 2.4;  // 放大镜相对默认 fit 缩放的倍数
+const GLOBAL_TOOLS = ['freeze'];  // 立即生效(全局)
 
 export class SeekerController {
   constructor({ canvas, input, net, world }) {
@@ -11,6 +9,7 @@ export class SeekerController {
     this.input = input;
     this.net = net;
     this.world = world;
+    this.debugMode = !!world.debugMode;
     this.baseZoom = computeFitZoom(canvas, world);
     this.cam = { x: world.w / 2, y: world.h / 2, zoom: this.baseZoom };
     this.armedTool = null;        // 已选中待施放的瞄准类工具
@@ -27,10 +26,8 @@ export class SeekerController {
   /** 窗口尺寸变化时重算 fit 缩放，保持全图可见 */
   _setupResize() {
     window.addEventListener('resize', () => {
-      const atBase = Math.abs(this.cam.zoom - this.baseZoom) < 0.02;
-      const magnifying = !!this.lastSnap?.magnify;
       this.baseZoom = computeFitZoom(this.canvas, this.world);
-      if (atBase && !magnifying) this.cam.zoom = this.baseZoom;
+      this.cam.zoom = this.baseZoom;
       this._clampCam();
     });
   }
@@ -96,7 +93,7 @@ export class SeekerController {
   }
 
   _activateTool(tool) {
-    if (this.lastSnap && (this.lastSnap.cooldownLeft > 0 || this.lastSnap.lockLeft > 0)) return;
+    if (!this.debugMode && this.lastSnap && (this.lastSnap.cooldownLeft > 0 || this.lastSnap.lockLeft > 0)) return;
     if (GLOBAL_TOOLS.includes(tool)) {
       this.net.send({ type: 'use_tool', tool, x: this.cam.x, y: this.cam.y });
     } else {
@@ -109,7 +106,7 @@ export class SeekerController {
     if (!this.lastSnap) return null;
     let best = null, bd = 18 * 18;
     for (const a of this.lastSnap.ants) {
-      if (a.marked || a.hidden) continue;
+      if (a.marked) continue;
       const dx = a.x - x, dy = a.y - y, d = dx * dx + dy * dy;
       if (d < bd) { bd = d; best = a; }
     }
@@ -133,7 +130,7 @@ export class SeekerController {
       const def = this.world.tools[key];
       const el = document.createElement('div');
       el.className = 'tool';
-      el.innerHTML = `<div class="key">[${i + 1}]</div><div class="name">${def.name}</div><div class="cd">CD ${def.cd}s</div><div class="cover hidden"></div>`;
+      el.innerHTML = `<div class="tool-tip">${def.desc || ''}</div><div class="key">[${i + 1}]</div><div class="name">${def.name}</div><div class="cd">${this.debugMode ? '无 CD' : `CD ${def.cd}s`}</div><div class="cover hidden"></div>`;
       el.addEventListener('click', () => this._activateTool(key));
       bar.appendChild(el);
       this.toolEls[key] = el;
@@ -145,16 +142,14 @@ export class SeekerController {
     for (const key of this.toolKeys) this.toolEls[key].classList.toggle('active', key === this.armedTool);
   }
 
-  // 每帧更新：放大镜缩放 + 工具冷却 UI，并返回渲染参数
+  // 每帧更新：工具冷却 UI，并返回渲染参数
   update(snap) {
     this.lastSnap = snap;
-    // 默认 fit 全图；放大镜在 fit 基础上再放大
-    const targetZoom = snap.magnify ? this.baseZoom * MAGNIFY_FACTOR : this.baseZoom;
-    this.cam.zoom += (targetZoom - this.cam.zoom) * 0.15;
+    this.cam.zoom = this.baseZoom;
     this._clampCam();
 
-    // 冷却 / 锁死遮罩
-    const blocked = snap.cooldownLeft > 0 || snap.lockLeft > 0;
+    // 冷却 / 锁死遮罩（调试模式无限制）
+    const blocked = !this.debugMode && (snap.cooldownLeft > 0 || snap.lockLeft > 0);
     const label = snap.lockLeft > 0 ? snap.lockLeft.toFixed(0) : snap.cooldownLeft.toFixed(0);
     for (const key of this.toolKeys) {
       const cover = this.toolEls[key].querySelector('.cover');
@@ -167,8 +162,6 @@ export class SeekerController {
     return {
       cam: this.cam,
       viewRadius,
-      magnify: snap.magnify,
-      thermal: snap.thermal,
       frozen: snap.frozen,
       panic: snap.panic,
     };

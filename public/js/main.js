@@ -33,19 +33,27 @@ $('restartBtn').addEventListener('click', () => {
 
 // ---- 开发者工具 ----
 
+// AI 数量滑块范围（与 index.html / Game.js 保持一致）
+const AI_ANT_COUNT_MIN = 10;
+const AI_ANT_COUNT_MAX = 200;
+
 // 默认 AI 参数值（与 config.js 保持一致）
 const DEV_DEFAULTS = {
+  AI_ANT_COUNT: 30,
   AI_SPEED_BASE: 60,
   AI_TURN_SMOOTH: 0.3,
   AI_SOCIAL_CHANCE: 0.05,
   AI_SPEED: { wander: 0.6, forage: 1.0, carry: 0.8, flee: 1.4 },
+  FOOD_COUNT: 5,
+  FOOD_CAPACITY: 60,
 };
 
-/** 读取所有滑块当前值，构造 dev_config 消息并发送给服务器 */
-function sendDevConfig() {
-  if (!running) return;
-  net.send({
-    type: 'dev_config',
+const DEV_STORAGE_KEY = 'antsDemo_devCfg';
+
+/** 将当前滑块值序列化后存入 localStorage */
+function persistDevConfig() {
+  const cfg = {
+    AI_ANT_COUNT: parseInt($('devAntCount').value, 10),
     AI_SPEED_BASE: parseFloat($('devSpeedBase').value),
     AI_TURN_SMOOTH: parseFloat($('devTurnSmooth').value),
     AI_SOCIAL_CHANCE: parseFloat($('devSocialChance').value),
@@ -55,21 +63,86 @@ function sendDevConfig() {
       carry: parseFloat($('devSpeedCarry').value),
       flee: parseFloat($('devSpeedFlee').value),
     },
+    FOOD_COUNT: parseInt($('devFoodCount').value, 10),
+    FOOD_CAPACITY: parseInt($('devFoodCapacity').value, 10),
+  };
+  localStorage.setItem(DEV_STORAGE_KEY, JSON.stringify(cfg));
+}
+
+/** 从 localStorage 恢复滑块值（缺字段时回落到 DEV_DEFAULTS） */
+function restoreDevConfig() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(DEV_STORAGE_KEY) || '{}'); } catch (_) {}
+  const c = { ...DEV_DEFAULTS, ...saved, AI_SPEED: { ...DEV_DEFAULTS.AI_SPEED, ...(saved.AI_SPEED || {}) } };
+  const antCount = Math.max(AI_ANT_COUNT_MIN, Math.min(AI_ANT_COUNT_MAX, c.AI_ANT_COUNT));
+
+  $('devAntCount').min = AI_ANT_COUNT_MIN;
+  $('devAntCount').max = AI_ANT_COUNT_MAX;
+  $('devAntCount').value = antCount;
+  $('devAntCountVal').textContent = antCount;
+  $('devSpeedBase').value = c.AI_SPEED_BASE;
+  $('devSpeedBaseVal').textContent = c.AI_SPEED_BASE;
+  $('devTurnSmooth').value = c.AI_TURN_SMOOTH;
+  $('devTurnSmoothVal').textContent = c.AI_TURN_SMOOTH.toFixed(2);
+  $('devSocialChance').value = c.AI_SOCIAL_CHANCE;
+  $('devSocialChanceVal').textContent = c.AI_SOCIAL_CHANCE.toFixed(3);
+  $('devSpeedWander').value = c.AI_SPEED.wander;
+  $('devSpeedWanderVal').textContent = c.AI_SPEED.wander.toFixed(2);
+  $('devSpeedForage').value = c.AI_SPEED.forage;
+  $('devSpeedForageVal').textContent = c.AI_SPEED.forage.toFixed(2);
+  $('devSpeedCarry').value = c.AI_SPEED.carry;
+  $('devSpeedCarryVal').textContent = c.AI_SPEED.carry.toFixed(2);
+  $('devSpeedFlee').value = c.AI_SPEED.flee;
+  $('devSpeedFleeVal').textContent = c.AI_SPEED.flee.toFixed(2);
+  $('devFoodCount').value = c.FOOD_COUNT;
+  $('devFoodCountVal').textContent = c.FOOD_COUNT;
+  $('devFoodCapacity').value = c.FOOD_CAPACITY;
+  $('devFoodCapacityVal').textContent = c.FOOD_CAPACITY;
+}
+
+// 页面加载时立即恢复
+restoreDevConfig();
+
+/** 读取所有滑块当前值，构造 dev_config 消息并发送给服务器 */
+function sendDevConfig() {
+  persistDevConfig();
+  // #region agent log
+  const _dbgPayload = {
+    AI_SPEED_BASE: parseFloat($('devSpeedBase').value),
+    AI_TURN_SMOOTH: parseFloat($('devTurnSmooth').value),
+    AI_SOCIAL_CHANCE: parseFloat($('devSocialChance').value),
+    AI_ANT_COUNT: parseInt($('devAntCount').value, 10),
+    AI_SPEED: {
+      wander: parseFloat($('devSpeedWander').value),
+      forage: parseFloat($('devSpeedForage').value),
+      carry: parseFloat($('devSpeedCarry').value),
+      flee: parseFloat($('devSpeedFlee').value),
+    },
+    FOOD_COUNT: parseInt($('devFoodCount').value, 10),
+    FOOD_CAPACITY: parseInt($('devFoodCapacity').value, 10),
+  };
+  fetch('http://127.0.0.1:7839/ingest/a610e76a-a66c-4ae5-8774-a8686212ae81',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9db26e'},body:JSON.stringify({sessionId:'9db26e',location:'main.js:sendDevConfig',message:'client sendDevConfig',data:{running,willSend:true,payload:_dbgPayload},timestamp:Date.now(),hypothesisId:'H1',runId:'post-fix'})}).catch(()=>{});
+  // #endregion
+  net.send({
+    type: 'dev_config',
+    ..._dbgPayload,
   });
 }
 
-/** 绑定单个滑块：实时更新显示值并节流发送 */
+/** 绑定单个滑块：实时更新显示值并以 16ms（约 1 帧）节流发送，保证修改下一帧即生效 */
 function bindSlider(id, valId, decimals) {
   const input = $(id);
   const valEl = $(valId);
   let timer = null;
   input.addEventListener('input', () => {
-    valEl.textContent = parseFloat(input.value).toFixed(decimals);
+    const n = parseFloat(input.value);
+    valEl.textContent = decimals === 0 ? String(Math.round(n)) : n.toFixed(decimals);
     clearTimeout(timer);
-    timer = setTimeout(sendDevConfig, 80);
+    timer = setTimeout(sendDevConfig, 16);
   });
 }
 
+bindSlider('devAntCount', 'devAntCountVal', 0);
 bindSlider('devSpeedBase', 'devSpeedBaseVal', 0);
 bindSlider('devTurnSmooth', 'devTurnSmoothVal', 2);
 bindSlider('devSocialChance', 'devSocialChanceVal', 3);
@@ -77,9 +150,14 @@ bindSlider('devSpeedWander', 'devSpeedWanderVal', 2);
 bindSlider('devSpeedForage', 'devSpeedForageVal', 2);
 bindSlider('devSpeedCarry', 'devSpeedCarryVal', 2);
 bindSlider('devSpeedFlee', 'devSpeedFleeVal', 2);
+bindSlider('devFoodCount', 'devFoodCountVal', 0);
+bindSlider('devFoodCapacity', 'devFoodCapacityVal', 0);
 
-/** 恢复所有滑块到默认值并同步服务器 */
+/** 恢复所有滑块到默认值，清除本地存储并同步服务器 */
 $('devReset').addEventListener('click', () => {
+  localStorage.removeItem(DEV_STORAGE_KEY);
+  $('devAntCount').value = DEV_DEFAULTS.AI_ANT_COUNT;
+  $('devAntCountVal').textContent = DEV_DEFAULTS.AI_ANT_COUNT;
   $('devSpeedBase').value = DEV_DEFAULTS.AI_SPEED_BASE;
   $('devSpeedBaseVal').textContent = DEV_DEFAULTS.AI_SPEED_BASE;
   $('devTurnSmooth').value = DEV_DEFAULTS.AI_TURN_SMOOTH;
@@ -94,6 +172,10 @@ $('devReset').addEventListener('click', () => {
   $('devSpeedCarryVal').textContent = DEV_DEFAULTS.AI_SPEED.carry.toFixed(2);
   $('devSpeedFlee').value = DEV_DEFAULTS.AI_SPEED.flee;
   $('devSpeedFleeVal').textContent = DEV_DEFAULTS.AI_SPEED.flee.toFixed(2);
+  $('devFoodCount').value = DEV_DEFAULTS.FOOD_COUNT;
+  $('devFoodCountVal').textContent = DEV_DEFAULTS.FOOD_COUNT;
+  $('devFoodCapacity').value = DEV_DEFAULTS.FOOD_CAPACITY;
+  $('devFoodCapacityVal').textContent = DEV_DEFAULTS.FOOD_CAPACITY;
   sendDevConfig();
 });
 
@@ -164,6 +246,7 @@ function resetGameUi() {
   $('toolbar').classList.add('hidden');
   $('seekerHint').classList.add('hidden');
   $('hiderHint').classList.add('hidden');
+  updateDevAntStats(null);
 }
 
 net.on('welcome', (m) => {
@@ -198,6 +281,7 @@ net.on('start', (m) => {
     $('toolbar').classList.add('hidden');
   }
   running = true;
+  sendDevConfig(); // 将本地已保存的调试参数同步到新对局
   requestAnimationFrame(loop);
 });
 
@@ -237,6 +321,21 @@ function updateHud(snap) {
   $('timer').textContent = `${m}:${String(s).padStart(2, '0')}`;
   if (role === ROLE.SEEKER) $('scoreTag').textContent = `已逃逸食物 ${snap.score}/${snap.quota}`;
   else $('scoreTag').textContent = `食物 ${snap.score}/${snap.quota}`;
+  updateDevAntStats(snap);
+}
+
+/** 更新调试面板中的蚂蚁数量统计（AI / 隐藏者 / 总数） */
+function updateDevAntStats(snap) {
+  if (!snap?.antStats) {
+    $('devStatAi').textContent = running ? '…' : '—';
+    $('devStatHider').textContent = '—';
+    $('devStatTotal').textContent = '—';
+    return;
+  }
+  const { ai, hider, total } = snap.antStats;
+  $('devStatAi').textContent = ai;
+  $('devStatHider').textContent = hider;
+  $('devStatTotal').textContent = total;
 }
 
 // ---- 事件提示 ----

@@ -138,7 +138,7 @@ html, body {
 /* 开发者工具面板 */
 .dev-panel {
   position: absolute; top: 56px; right: 16px;
-  width: 300px; max-height: calc(100vh - 80px); overflow-y: auto;
+  width: 380px; max-height: calc(100vh - 80px); overflow-y: auto; overflow-x: hidden;
   background: rgba(18,14,9,0.96); border: 1px solid #4a3d28; border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.6); z-index: 100; font-size: 13px;
 }
@@ -158,17 +158,31 @@ html, body {
   margin: 12px 0 6px; border-bottom: 1px solid #2e2820; padding-bottom: 4px;
 }
 .dev-section-title:first-child { margin-top: 0; }
+.dev-ant-stats {
+  display: flex; justify-content: space-between; gap: 6px;
+  margin-bottom: 8px; padding: 6px 8px; border-radius: 6px;
+  background: rgba(30,25,18,0.7); border: 1px solid #2e2820;
+  font-size: 11px; color: #8a7c60;
+}
+.dev-ant-stats b {
+  display: block; margin-top: 2px; font-size: 15px; color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
 .dev-row {
   display: flex; align-items: center; gap: 8px; margin-bottom: 7px;
 }
 .dev-toggle-row { justify-content: space-between; }
-.dev-label { flex: 0 0 110px; color: #c8bc9a; font-size: 12px; }
+.dev-label { flex: 0 0 120px; color: #c8bc9a; font-size: 12px; }
 .dev-row input[type="range"] {
   flex: 1; height: 4px; cursor: pointer; accent-color: var(--accent);
 }
 .dev-val {
-  flex: 0 0 36px; text-align: right; color: var(--accent);
+  flex: 0 0 52px; text-align: right; color: var(--accent);
   font-size: 12px; font-variant-numeric: tabular-nums;
+  overflow: visible; white-space: nowrap;
+}
+.dev-range-hint {
+  display: block; margin-top: 1px; font-size: 10px; color: #7a6e55;
 }
 .dev-row input[type="checkbox"] {
   width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent);

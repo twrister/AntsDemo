@@ -10,6 +10,7 @@ export class Room {
     this.state = 'lobby';
     this.game = null;
     this.loop = null;
+    this.pendingDevCfg = null;  // 最近一次 dev_config，开局时自动套用
   }
 
   get seeker() { return [...this.players.values()].find(p => p.role === ROLE.SEEKER); }
@@ -118,6 +119,8 @@ export class Room {
   _beginPlaying(hiders) {
     this.state = 'playing';
     this.game = new Game(hiders);
+    // 开局立即套用已缓存的调试参数，避免首帧仍用默认 AI 数量/速度
+    if (this.pendingDevCfg) this.game.setDevConfig(this.pendingDevCfg);
 
     for (const p of this.players.values()) {
       const ant = p.role === ROLE.HIDER ? this.game.ants.find(a => a.playerId === p.id) : null;
@@ -175,7 +178,14 @@ export class Room {
       case 'pickup': if (g && p.role === ROLE.HIDER) g.setHiderPickup(id, !!msg.active); break;
       case 'mark': if (g && p.role === ROLE.SEEKER) g.markAnt(msg.antId); break;
       case 'use_tool': if (g && p.role === ROLE.SEEKER) g.useTool(msg.tool, msg.x, msg.y); break;
-      case 'dev_config': if (g) g.setDevConfig(msg); break;
+      case 'dev_config': {
+        this.pendingDevCfg = msg;
+        // #region agent log
+        fetch('http://127.0.0.1:7839/ingest/a610e76a-a66c-4ae5-8774-a8686212ae81',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9db26e'},body:JSON.stringify({sessionId:'9db26e',location:'Room.js:dev_config',message:'server dev_config received',data:{hasGame:!!g,state:this.state,AI_SPEED_BASE:msg.AI_SPEED_BASE,AI_ANT_COUNT:msg.AI_ANT_COUNT,cached:true},timestamp:Date.now(),hypothesisId:'H2',runId:'post-fix'})}).catch(()=>{});
+        // #endregion
+        if (g) g.setDevConfig(msg);
+        break;
+      }
     }
   }
 

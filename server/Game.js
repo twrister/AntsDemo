@@ -14,6 +14,7 @@ export class Game {
     this.now = 0;
     this.timeLeft = CONFIG.MATCH_DURATION;
     this.ants = [];
+    this._nextAntId = 0;  // 全局自增 ID，避免 _adjustAntCount 增量时 ID 重复
     this.foodSources = [];   // 可枯竭食物堆，替代原 normalFood
     this.markedFood = [];
     this.nest = { x: CONFIG.WORLD_W * 0.5, y: 80 };
@@ -66,16 +67,15 @@ export class Game {
     this._spawnFoodSources(CONFIG.FOOD.count);
 
     // 生成 AI 蚂蚁
-    let id = 0;
     for (let i = 0; i < CONFIG.AI_ANT_COUNT; i++) {
-      this.ants.push(this._makeAnt(id++, false, null));
+      this.ants.push(this._makeAnt(this._nextAntId++, false, null));
     }
 
     // 隐藏者附身
     for (const h of hiderPlayers) {
       const host = this.ants[Math.floor(Math.random() * this.ants.length)];
       const { traits, devDim } = deriveHiderTraits(host.traits);
-      const ant = this._makeAnt(id++, true, h.id);
+      const ant = this._makeAnt(this._nextAntId++, true, h.id);
       ant.traits = traits;
       ant.devDim = devDim;
       ant.bot = !!h.bot;
@@ -86,9 +86,14 @@ export class Game {
     }
   }
 
+  /** 获取当前生效的食物堆容量（开发者工具可热改） */
+  _foodCapacity() {
+    return this.devCfg.FOOD_CAPACITY ?? CONFIG.FOOD.capacity;
+  }
+
   /** 在地图上随机生成 n 个食物堆，保证距巢至少 200px */
   _spawnFoodSources(n) {
-    const { capacity } = CONFIG.FOOD;
+    const capacity = this._foodCapacity();
     const nestX = this.nest.x, nestY = this.nest.y;
     const target = this.foodSources.length + n;
     let nextId = this.foodSources.length;
@@ -226,6 +231,7 @@ export class Game {
     // 食物堆重生检查
     for (const s of this.foodSources) {
       if (s.amount <= 0 && s.respawnAt > 0 && this.now >= s.respawnAt) {
+        s.capacity = this._foodCapacity();
         s.amount = s.capacity;
         s.x = rand(80, CONFIG.WORLD_W - 80);
         s.y = rand(200, CONFIG.WORLD_H - 80);
@@ -274,6 +280,12 @@ export class Game {
     }
 
     this._pheroTickCount++;
+    // #region agent log
+    if (this._dbgTick === undefined) this._dbgTick = 0;
+    if (++this._dbgTick % 60 === 0) {
+      fetch('http://127.0.0.1:7839/ingest/a610e76a-a66c-4ae5-8774-a8686212ae81',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9db26e'},body:JSON.stringify({sessionId:'9db26e',location:'Game.js:update',message:'tick devCfg snapshot',data:{devCfg:this.devCfg,aiCount:this.ants.filter(a=>!a.isHider).length,now:this.now},timestamp:Date.now(),hypothesisId:'H4'})}).catch(()=>{});
+    }
+    // #endregion
   }
 
   _updateHider(ant, dt) {
@@ -387,10 +399,14 @@ export class Game {
       };
     }
 
+    const aiCount = this.ants.filter(a => !a.isHider).length;
+    const hiderCount = this.ants.filter(a => a.isHider).length;
+
     return {
       now: +this.now.toFixed(2),
       timeLeft: Math.ceil(this.timeLeft),
       ants,
+      antStats: { ai: aiCount, hider: hiderCount, total: aiCount + hiderCount },
       // 食物堆替代原 normalFood：包含位置与剩余量
       normalFood: this.foodSources.map(s => ({
         x: Math.round(s.x),
@@ -418,15 +434,81 @@ export class Game {
   drainEvents() { const e = this.events; this.events = []; return e; }
 
   /**
+   * 动态调整食物堆数量，立即生效。
+   * 增加时在随机位置生成新堆；减少时从末尾移除。
+   */
+  _adjustFoodCount(targetCount) {
+    const clamped = Math.max(1, Math.min(20, Math.round(targetCount)));
+    const current = this.foodSources.length;
+    if (clamped > current) {
+      this._spawnFoodSources(clamped - current);
+    } else if (clamped < current) {
+      this.foodSources = this.foodSources.slice(0, clamped);
+    }
+  }
+
+  /**
+   * 更新所有食物堆的容量上限；若当前剩余量超出新上限则截断。
+   * 重生时也会使用新容量。
+   */
+  _setFoodCapacity(capacity) {
+    const cap = Math.max(10, Math.min(200, Math.round(capacity)));
+    this.devCfg.FOOD_CAPACITY = cap;
+    for (const s of this.foodSources) {
+      s.capacity = cap;
+      if (s.amount > cap) s.amount = cap;
+    }
+  }
+
+  /**
    * 更新开发者调试参数（运行时热修改 AI 行为，不重启对局）。
-   * 支持字段：AI_SPEED_BASE / AI_TURN_SMOOTH / AI_SOCIAL_CHANCE / AI_SPEED
+   * 所有参数下一帧即生效（speed/turn 逐帧读取；ant count 立即增删蚂蚁）。
+   * 支持字段：AI_SPEED_BASE / AI_TURN_SMOOTH / AI_SOCIAL_CHANCE / AI_SPEED / AI_ANT_COUNT / FOOD_COUNT / FOOD_CAPACITY
    */
   setDevConfig(params) {
+    const aiCountBefore = this.ants.filter(a => !a.isHider).length;
     if (params.AI_SPEED_BASE !== undefined) this.devCfg.AI_SPEED_BASE = +params.AI_SPEED_BASE;
     if (params.AI_TURN_SMOOTH !== undefined) this.devCfg.AI_TURN_SMOOTH = +params.AI_TURN_SMOOTH;
     if (params.AI_SOCIAL_CHANCE !== undefined) this.devCfg.AI_SOCIAL_CHANCE = +params.AI_SOCIAL_CHANCE;
     if (params.AI_SPEED) {
       this.devCfg.AI_SPEED = { ...CONFIG.AI_SPEED, ...this.devCfg.AI_SPEED, ...params.AI_SPEED };
+    }
+    if (params.AI_ANT_COUNT !== undefined) {
+      this._adjustAntCount(Math.max(10, Math.min(200, Math.round(+params.AI_ANT_COUNT))));
+    }
+    if (params.FOOD_COUNT !== undefined) {
+      this._adjustFoodCount(+params.FOOD_COUNT);
+    }
+    if (params.FOOD_CAPACITY !== undefined) {
+      this._setFoodCapacity(+params.FOOD_CAPACITY);
+    }
+    const aiCountAfter = this.ants.filter(a => !a.isHider).length;
+    // #region agent log
+    fetch('http://127.0.0.1:7839/ingest/a610e76a-a66c-4ae5-8774-a8686212ae81',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'9db26e'},body:JSON.stringify({sessionId:'9db26e',location:'Game.js:setDevConfig',message:'setDevConfig applied',data:{devCfg:this.devCfg,aiCountBefore,aiCountAfter,paramsAI_SPEED_BASE:params.AI_SPEED_BASE},timestamp:Date.now(),hypothesisId:'H3',runId:'post-fix'})}).catch(()=>{});
+    // #endregion
+  }
+
+  /**
+   * 动态调整 AI 蚂蚁数量，立即生效。
+   * 增加时从随机位置生成新蚂蚁；减少时从末尾移除非隐藏者蚂蚁。
+   */
+  _adjustAntCount(targetCount) {
+    const aiAnts = this.ants.filter(a => !a.isHider);
+    const current = aiAnts.length;
+    if (targetCount === current) return;
+
+    if (targetCount > current) {
+      for (let i = 0; i < targetCount - current; i++) {
+        this.ants.push(this._makeAnt(this._nextAntId++, false, null));
+      }
+    } else {
+      let removed = 0;
+      const toRemove = current - targetCount;
+      // 从后往前移除 AI 蚂蚁（保留隐藏者）
+      this.ants = this.ants.filter(a => {
+        if (!a.isHider && removed < toRemove) { removed++; return false; }
+        return true;
+      });
     }
   }
 }

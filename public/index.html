@@ -58,6 +58,16 @@
         </label>
 
         <div class="dev-section-title">AI 基础参数</div>
+        <div class="dev-ant-stats" id="devAntStats">
+          <span>AI <b id="devStatAi">—</b></span>
+          <span>隐藏者 <b id="devStatHider">—</b></span>
+          <span>总数 <b id="devStatTotal">—</b></span>
+        </div>
+        <div class="dev-row">
+          <span class="dev-label">AI 数量<span class="dev-range-hint">10 – 200</span></span>
+          <input type="range" id="devAntCount" min="10" max="200" step="1" value="30" />
+          <span class="dev-val" id="devAntCountVal">30</span>
+        </div>
         <div class="dev-row">
           <span class="dev-label">基准速度</span>
           <input type="range" id="devSpeedBase" min="10" max="200" step="5" value="60" />
@@ -72,6 +82,18 @@
           <span class="dev-label">社交概率</span>
           <input type="range" id="devSocialChance" min="0" max="0.3" step="0.005" value="0.05" />
           <span class="dev-val" id="devSocialChanceVal">0.050</span>
+        </div>
+
+        <div class="dev-section-title">食物堆</div>
+        <div class="dev-row">
+          <span class="dev-label">食物堆数量<span class="dev-range-hint">1 – 20</span></span>
+          <input type="range" id="devFoodCount" min="1" max="20" step="1" value="5" />
+          <span class="dev-val" id="devFoodCountVal">5</span>
+        </div>
+        <div class="dev-row">
+          <span class="dev-label">每堆容量<span class="dev-range-hint">10 – 200</span></span>
+          <input type="range" id="devFoodCapacity" min="10" max="200" step="5" value="60" />
+          <span class="dev-val" id="devFoodCapacityVal">60</span>
         </div>
 
         <div class="dev-section-title">各状态速度倍率</div>

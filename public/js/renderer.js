@@ -137,7 +137,7 @@ export class Renderer {
     }
   }
 
-  /** 绘制可枯竭食物堆：按剩余量/容量比例决定圆点大小与颜色深浅 */
+  /** 绘制可枯竭食物堆：按剩余量/容量比例决定圆点大小与颜色深浅，并标注剩余数量 */
   _drawNormalFood(ctx, food) {
     if (!food) return;
     for (const f of food) {
@@ -153,6 +153,16 @@ export class Renderer {
       ctx.strokeStyle = `rgba(200,230,160,${(alpha * 0.6).toFixed(2)})`;
       ctx.lineWidth = 1.5;
       ctx.stroke();
+      // 剩余数量文字（带描边提升可读性）
+      const label = String(f.amount);
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(20,16,10,0.85)';
+      ctx.strokeText(label, f.x, f.y);
+      ctx.fillStyle = '#e8f4d0';
+      ctx.fillText(label, f.x, f.y);
     }
   }
 

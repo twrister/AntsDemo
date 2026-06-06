@@ -1,6 +1,9 @@
 // 搜寻者控制器：镜头平移、视野半径、点击标记、工具使用与全局冷却。
+import { computeFitZoom } from './const.js';
+
 const GLOBAL_TOOLS = ['freeze', 'thermal', 'magnify'];      // 立即生效(全局)
 const AIMED_TOOLS = ['panic', 'bait', 'track'];             // 需选点
+const MAGNIFY_FACTOR = 2.4;  // 放大镜相对默认 fit 缩放的倍数
 
 export class SeekerController {
   constructor({ canvas, input, net, world }) {
@@ -8,7 +11,8 @@ export class SeekerController {
     this.input = input;
     this.net = net;
     this.world = world;
-    this.cam = { x: world.w / 2, y: world.h / 2, zoom: 1 };
+    this.baseZoom = computeFitZoom(canvas, world);
+    this.cam = { x: world.w / 2, y: world.h / 2, zoom: this.baseZoom };
     this.armedTool = null;        // 已选中待施放的瞄准类工具
     this.toolKeys = Object.keys(world.tools); // 工具顺序
     this.lastSnap = null;
@@ -17,6 +21,18 @@ export class SeekerController {
     this._buildToolbar();
     this._setupClick();
     this._setupHotkeys();
+    this._setupResize();
+  }
+
+  /** 窗口尺寸变化时重算 fit 缩放，保持全图可见 */
+  _setupResize() {
+    window.addEventListener('resize', () => {
+      const atBase = Math.abs(this.cam.zoom - this.baseZoom) < 0.02;
+      const magnifying = !!this.lastSnap?.magnify;
+      this.baseZoom = computeFitZoom(this.canvas, this.world);
+      if (atBase && !magnifying) this.cam.zoom = this.baseZoom;
+      this._clampCam();
+    });
   }
 
   _setupDrag() {
@@ -43,9 +59,17 @@ export class SeekerController {
     window.addEventListener('mouseup', () => { dragging = false; last = null; this.canvas.classList.remove('dragging'); });
   }
 
+  /** 限制镜头中心，避免 zoom 小于 fit 时露出地图外空白 */
   _clampCam() {
-    this.cam.x = Math.max(0, Math.min(this.world.w, this.cam.x));
-    this.cam.y = Math.max(0, Math.min(this.world.h, this.cam.y));
+    const hw = this.canvas.width / this.cam.zoom / 2;
+    const hh = this.canvas.height / this.cam.zoom / 2;
+    this.cam.x = this._clampAxis(this.cam.x, this.world.w, hw);
+    this.cam.y = this._clampAxis(this.cam.y, this.world.h, hh);
+  }
+
+  _clampAxis(pos, size, halfVisible) {
+    if (halfVisible >= size / 2) return size / 2;
+    return Math.max(halfVisible, Math.min(size - halfVisible, pos));
   }
 
   _setupClick() {
@@ -124,9 +148,10 @@ export class SeekerController {
   // 每帧更新：放大镜缩放 + 工具冷却 UI，并返回渲染参数
   update(snap) {
     this.lastSnap = snap;
-    // 放大镜：临时放大到约 2.4 倍
-    const targetZoom = snap.magnify ? 2.4 : 1;
+    // 默认 fit 全图；放大镜在 fit 基础上再放大
+    const targetZoom = snap.magnify ? this.baseZoom * MAGNIFY_FACTOR : this.baseZoom;
     this.cam.zoom += (targetZoom - this.cam.zoom) * 0.15;
+    this._clampCam();
 
     // 冷却 / 锁死遮罩
     const blocked = snap.cooldownLeft > 0 || snap.lockLeft > 0;

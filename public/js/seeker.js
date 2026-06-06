@@ -95,6 +95,22 @@ export class SeekerController {
     });
   }
 
+  /** 强光光束向目标点限速移动（像素/秒） */
+  _moveBeamToward(target, dt) {
+    const speed = this.world.tools.panic.beamSpeed ?? 280;
+    const maxMove = speed * dt;
+    const dx = target.x - this._localBeam.x;
+    const dy = target.y - this._localBeam.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist <= maxMove || dist === 0) {
+      this._localBeam.x = target.x;
+      this._localBeam.y = target.y;
+      return;
+    }
+    this._localBeam.x += (dx / dist) * maxMove;
+    this._localBeam.y += (dy / dist) * maxMove;
+  }
+
   /** 强光照射：点击地图开始，自动持续至时长结束 */
   _startBeam(wp) {
     if (this.beamActive) return;
@@ -102,7 +118,7 @@ export class SeekerController {
     this.beamActive = true;
     this._beamConfirmed = false;
     this._beamSendTimer = 0;
-    this._localBeam = wp;
+    this._localBeam = { x: wp.x, y: wp.y };
     this.net.send({ type: 'tool_beam', tool: 'panic', x: wp.x, y: wp.y, active: true });
     this.armedTool = null;
     this._refreshArmed();
@@ -171,13 +187,13 @@ export class SeekerController {
     this.cam.zoom = this.baseZoom;
     this._clampCam();
 
-    // 照射中：跟随鼠标更新光束位置（限频 ~10Hz 同步服务器）
+    // 照射中：限速跟随鼠标，限频 ~10Hz 同步服务器
     if (this.beamActive) {
-      const wp = this.screenToWorld(this.input.mouse.x, this.input.mouse.y);
-      this._localBeam = wp;
+      const target = this.screenToWorld(this.input.mouse.x, this.input.mouse.y);
+      this._moveBeamToward(target, dt);
       this._beamSendTimer -= dt;
       if (this._beamSendTimer <= 0) {
-        this.net.send({ type: 'tool_beam', tool: 'panic', x: wp.x, y: wp.y, active: true });
+        this.net.send({ type: 'tool_beam', tool: 'panic', x: target.x, y: target.y, active: true });
         this._beamSendTimer = 0.1;
       }
       if (snap.lightBeam) this._beamConfirmed = true;

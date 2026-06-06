@@ -8,6 +8,20 @@ import { ROLE } from './protocol.js';
 function rand(a, b) { return a + Math.random() * (b - a); }
 function dist2(a, b) { const dx = a.x - b.x, dy = a.y - b.y; return dx * dx + dy * dy; }
 
+/** 将 pos 以 maxDist 为步长移向 target */
+function moveToward(pos, target, maxDist) {
+  const dx = target.x - pos.x;
+  const dy = target.y - pos.y;
+  const dist = Math.hypot(dx, dy);
+  if (dist <= maxDist || dist === 0) {
+    pos.x = target.x;
+    pos.y = target.y;
+    return;
+  }
+  pos.x += (dx / dist) * maxDist;
+  pos.y += (dy / dist) * maxDist;
+}
+
 export class Game {
   /** @param hiderPlayers 隐藏者描述数组：{ id, bot } */
   /** @param opts.debugMode 单机调试：搜寻者工具无全局 CD、误标记不锁技能 */
@@ -180,23 +194,34 @@ export class Game {
           if (this.now < this.globalCooldownUntil || this.now < this.lockUntil) return;
           this.globalCooldownUntil = this.now + def.cd;
         }
-        this.lightBeam = { x, y, until: this.now + def.duration };
+        this.lightBeam = { x, y, targetX: x, targetY: y, until: this.now + def.duration };
         this.events.push({ t: 'tool', tool, x, y });
       } else {
-        this.lightBeam.x = x;
-        this.lightBeam.y = y;
+        this.lightBeam.targetX = x;
+        this.lightBeam.targetY = y;
       }
     } else {
       this.lightBeam = null;
     }
   }
 
-  /** 强光范围内触发 AI 蚂蚁逃离光源 */
-  _applyLightPanic() {
+  /** 强光光束限速移向客户端上报的目标点 */
+  _updateLightBeam(dt) {
     if (!this.lightBeam || this.now >= this.lightBeam.until) {
       this.lightBeam = null;
       return;
     }
+    const speed = CONFIG.TOOLS.panic.beamSpeed ?? 280;
+    moveToward(
+      this.lightBeam,
+      { x: this.lightBeam.targetX, y: this.lightBeam.targetY },
+      speed * dt,
+    );
+  }
+
+  /** 强光范围内触发 AI 蚂蚁逃离光源 */
+  _applyLightPanic() {
+    if (!this.lightBeam) return;
     const def = CONFIG.TOOLS.panic;
     const r2 = def.radius * def.radius;
     const src = { x: this.lightBeam.x, y: this.lightBeam.y };
@@ -286,6 +311,7 @@ export class Game {
 
     // 信息素蒸发（负反馈，每帧执行）
     this.phero.evaporate(dt);
+    this._updateLightBeam(dt);
     this._applyLightPanic();
 
     // 食物堆重生检查

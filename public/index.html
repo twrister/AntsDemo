@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>蚁群迷踪 Ant Hunt</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <!-- 大厅 -->
+  <div id="lobby" class="screen">
+    <div class="panel">
+      <h1>蚁群迷踪</h1>
+      <p class="subtitle">Ant Hunt · 非对称社交推理</p>
+      <input id="nameInput" maxlength="16" placeholder="输入昵称" />
+      <button id="joinBtn">加入房间</button>
+      <div class="solo-section">
+        <p class="solo-label">单机调试</p>
+        <div class="solo-btns">
+          <button id="soloSeekerBtn" class="solo-btn" type="button">调试搜寻者</button>
+          <button id="soloHiderBtn" class="solo-btn" type="button">调试隐藏者</button>
+        </div>
+        <p class="hint solo-hint">无需联机，快速测试操作与玩法</p>
+      </div>
+      <div id="lobbyInfo" class="lobby-info hidden">
+        <p id="roleLine"></p>
+        <ul id="playerList"></ul>
+        <button id="readyBtn">准备开始</button>
+        <p class="hint">第一个进房者为搜寻者，其余为隐藏者。开多个标签页即可联机。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 游戏画面 -->
+  <div id="game" class="screen hidden">
+    <canvas id="canvas"></canvas>
+
+    <!-- 顶部信息条 -->
+    <div id="hud" class="hud">
+      <div class="hud-item" id="timer">10:00</div>
+      <div class="hud-item" id="roleTag"></div>
+      <div class="hud-item" id="scoreTag"></div>
+      <button id="pheroToggleBtn" class="hud-item hud-btn phero-on" title="切换信息素可视化">信息素</button>
+      <button id="devPanelBtn" class="hud-item hud-btn" title="开发者工具 (`)">DEV</button>
+    </div>
+
+    <!-- 开发者工具面板 -->
+    <div id="devPanel" class="dev-panel hidden">
+      <div class="dev-header">
+        <span>开发者工具</span>
+        <button id="devClose" class="dev-close">×</button>
+      </div>
+      <div class="dev-body">
+        <div class="dev-section-title">信息素可视化</div>
+        <label class="dev-row dev-toggle-row">
+          <span class="dev-label">显示信息素轨迹</span>
+          <input type="checkbox" id="devPheroCheck" checked />
+        </label>
+
+        <div class="dev-section-title">AI 基础参数</div>
+        <div class="dev-row">
+          <span class="dev-label">基准速度</span>
+          <input type="range" id="devSpeedBase" min="10" max="200" step="5" value="60" />
+          <span class="dev-val" id="devSpeedBaseVal">60</span>
+        </div>
+        <div class="dev-row">
+          <span class="dev-label">转弯平滑度</span>
+          <input type="range" id="devTurnSmooth" min="0.05" max="2.0" step="0.05" value="0.3" />
+          <span class="dev-val" id="devTurnSmoothVal">0.30</span>
+        </div>
+        <div class="dev-row">
+          <span class="dev-label">社交概率</span>
+          <input type="range" id="devSocialChance" min="0" max="0.3" step="0.005" value="0.05" />
+          <span class="dev-val" id="devSocialChanceVal">0.050</span>
+        </div>
+
+        <div class="dev-section-title">各状态速度倍率</div>
+        <div class="dev-row">
+          <span class="dev-label">游走 (wander)</span>
+          <input type="range" id="devSpeedWander" min="0.1" max="3.0" step="0.05" value="0.6" />
+          <span class="dev-val" id="devSpeedWanderVal">0.60</span>
+        </div>
+        <div class="dev-row">
+          <span class="dev-label">觅食 (forage)</span>
+          <input type="range" id="devSpeedForage" min="0.1" max="3.0" step="0.05" value="1.0" />
+          <span class="dev-val" id="devSpeedForageVal">1.00</span>
+        </div>
+        <div class="dev-row">
+          <span class="dev-label">搬运 (carry)</span>
+          <input type="range" id="devSpeedCarry" min="0.1" max="3.0" step="0.05" value="0.8" />
+          <span class="dev-val" id="devSpeedCarryVal">0.80</span>
+        </div>
+        <div class="dev-row">
+          <span class="dev-label">逃跑 (flee)</span>
+          <input type="range" id="devSpeedFlee" min="0.1" max="4.0" step="0.1" value="1.4" />
+          <span class="dev-val" id="devSpeedFleeVal">1.40</span>
+        </div>
+
+        <button id="devReset" class="dev-reset-btn">恢复默认值</button>
+      </div>
+    </div>
+
+    <!-- 搜寻者工具栏 -->
+    <div id="toolbar" class="toolbar hidden"></div>
+    <div id="seekerHint" class="bottom-hint hidden">拖拽平移镜头 · 点击蚂蚁进行标记 · 数字键/点击使用工具</div>
+
+    <!-- 隐藏者操作提示 -->
+    <div id="hiderHint" class="bottom-hint hidden">按住鼠标左键朝鼠标方向移动 · 静止时按住空格拾取标记食物 · 模仿 AI 蚂蚁的行为别露馅</div>
+
+    <!-- 事件提示 -->
+    <div id="toast"></div>
+  </div>
+
+  <!-- 结算 -->
+  <div id="endScreen" class="screen hidden">
+    <div class="panel">
+      <h1 id="endTitle"></h1>
+      <p id="endReason"></p>
+      <p id="endScore"></p>
+      <button id="restartBtn">返回大厅</button>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

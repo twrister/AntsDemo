@@ -1,4 +1,4 @@
-// Canvas 2D 渲染器：绘制蚁群、盲区、食物、信息素轨迹、工具效果。
+// Canvas 2D 渲染器：绘制蚁群、食物、信息素轨迹、工具效果。
 // 蚂蚁按 5 个特征维度绘制差异 (GDD 3.1)，使搜寻者能用肉眼识别破绽。
 import { ROLE } from './const.js';
 
@@ -40,7 +40,6 @@ export class Renderer {
     this._drawGround(ctx, opts.world);
     // 信息素轨迹绘制在地面之上、蚂蚁之下，呈现搬运通道
     if (this._cachedPhero && opts.showPheromone !== false) this._drawPheromone(ctx, this._cachedPhero);
-    this._drawTunnels(ctx, snap.tunnels);
     this._drawNest(ctx, snap.nest);
     this._drawNormalFood(ctx, snap.normalFood);
     if (snap.bait) this._drawBait(ctx, snap.bait, opts.time);
@@ -69,17 +68,6 @@ export class Renderer {
     ctx.strokeStyle = '#4a3d28';
     ctx.lineWidth = 4;
     ctx.strokeRect(0, 0, world.w, world.h);
-  }
-
-  _drawTunnels(ctx, tunnels) {
-    if (!tunnels) return;
-    for (const t of tunnels) {
-      ctx.beginPath();
-      ctx.arc(t.x, t.y, 22, 0, Math.PI * 2);
-      ctx.fillStyle = '#0d0a06';
-      ctx.fill();
-      ctx.strokeStyle = '#6b5736'; ctx.lineWidth = 4; ctx.stroke();
-    }
   }
 
   _drawNest(ctx, nest) {

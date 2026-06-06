@@ -18,7 +18,6 @@ export class Game {
     this._nextAntId = 0;  // 全局自增 ID，避免 _adjustAntCount 增量时 ID 重复
     this.foodSources = [];
     this.nest = { x: CONFIG.WORLD_W * 0.5, y: 80 };
-    this.tunnels = [];
     this.events = [];
 
     // 信息素场
@@ -47,12 +46,6 @@ export class Game {
   }
 
   _buildWorld(hiderPlayers) {
-    this.tunnels = [
-      { id: 0, x: 240, y: 300, link: 1 },
-      { id: 1, x: 1360, y: 900, link: 0 },
-      { id: 2, x: 1360, y: 300, link: 3 },
-      { id: 3, x: 240, y: 900, link: 2 },
-    ];
     // 可枯竭食物堆：分散在地图各处，远离巢穴
     this._spawnFoodSources(CONFIG.FOOD.count);
 
@@ -111,7 +104,6 @@ export class Game {
       sprinting: false,
       pickupProgress: 0,
       depositProgress: 0,
-      inTunnelUntil: 0,
       tripTime: isHider ? rand(0, CONFIG.PHEROMONE.TAU) : 0,
     };
     if (!isHider) initAI(ant);
@@ -378,7 +370,6 @@ export class Game {
       })),
       foodActionTime: CONFIG.FOOD_ACTION_TIME,
       nest: this.nest,
-      tunnels: this.tunnels,
       bait: this.bait && this.now < this.bait.until ? { x: this.bait.x, y: this.bait.y } : null,
       score: this.score,
       quota: this.quota,

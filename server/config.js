@@ -18,9 +18,6 @@ export const CONFIG = {
   // 外观破绽
   TRAIT_DEVIANCE_VISIBILITY: 0.15, // 特征偏差可见度 15%
 
-  // 盲区
-  TUNNEL_TRANSIT: 6,        // 隧道通行时间 (秒)
-
   // 工具 (全局冷却，单位秒)
   TOOLS: {
     panic:   { name: '恐慌信息素', cd: 30, duration: 4,  desc: 'AI 蚂蚁惊慌乱窜，隐藏者不受影响，可借此找出行为异常者。点击地图施放，持续 4 秒。' },

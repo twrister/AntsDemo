@@ -15,8 +15,7 @@ export class Game {
     this.timeLeft = CONFIG.MATCH_DURATION;
     this.ants = [];
     this._nextAntId = 0;  // 全局自增 ID，避免 _adjustAntCount 增量时 ID 重复
-    this.foodSources = [];   // 可枯竭食物堆，替代原 normalFood
-    this.markedFood = [];
+    this.foodSources = [];
     this.nest = { x: CONFIG.WORLD_W * 0.5, y: 80 };
     this.tunnels = [];
     this.thickets = [];
@@ -46,8 +45,6 @@ export class Game {
     this.devCfg = {};
 
     this._buildWorld(hiderPlayers);
-    this._foodTimer = CONFIG.FOOD_RESPAWN_INTERVAL;
-    for (let i = 0; i < CONFIG.MARKED_FOOD_SLOTS; i++) this._spawnMarkedFood();
   }
 
   _buildWorld(hiderPlayers) {
@@ -115,26 +112,16 @@ export class Game {
       angle: rand(-Math.PI, Math.PI),
       traits: randomTraits(),
       carrying: false,
-      hasMarkedFood: false,
       marked: false,
       suspicious: 0,
       vx: 0, vy: 0,
       sprinting: false,
       pickupProgress: 0,
+      depositProgress: 0,
       inTunnelUntil: 0,
     };
     if (!isHider) initAI(ant);
     return ant;
-  }
-
-  _spawnMarkedFood() {
-    this.markedFood.push({
-      id: Math.random().toString(36).slice(2, 8),
-      x: rand(80, CONFIG.WORLD_W - 80),
-      y: rand(200, CONFIG.WORLD_H - 80),
-      carriedBy: null,
-      dropUntil: 0,
-    });
   }
 
   // ---------- 玩家输入 ----------
@@ -160,9 +147,10 @@ export class Game {
     if (ant.isHider) {
       ant.marked = true;
       ant.vx = ant.vy = 0;
-      if (ant.hasMarkedFood) {
-        ant.hasMarkedFood = false;
-        this._dropFoodAt(ant.x, ant.y);
+      if (ant.carrying) {
+        ant.carrying = false;
+        ant.pickupProgress = 0;
+        ant.depositProgress = 0;
       }
       this.events.push({ t: 'mark_hit', x: ant.x, y: ant.y });
       this._checkWin();
@@ -210,13 +198,77 @@ export class Game {
     this.events.push({ t: 'tool', tool, x, y });
   }
 
-  _dropFoodAt(x, y) {
-    this.markedFood.push({
-      id: Math.random().toString(36).slice(2, 8),
-      x, y,
-      carriedBy: null,
-      dropUntil: this.now + CONFIG.FOOD_DROP_DESPAWN,
-    });
+  /**
+   * 统一处理取/放食物：进入范围后原地等待 FOOD_ACTION_TIME 秒完成动作。
+   * @returns {boolean} 是否处于取/放等待中（此时不应移动）
+   */
+  _processFoodAction(ant, dt) {
+    const actionTime = CONFIG.FOOD_ACTION_TIME;
+    const pickupR2 = CONFIG.FOOD.pickupRadius * CONFIG.FOOD.pickupRadius;
+    const nestR2 = CONFIG.FOOD.nestRadius * CONFIG.FOOD.nestRadius;
+
+    if (!ant.carrying) {
+      const src = this._nearestFoodSource(ant);
+      if (!src || dist2(ant, src) >= pickupR2) {
+        ant.pickupProgress = 0;
+        return false;
+      }
+      // 玩家隐藏者需静止才能拾取
+      if (ant.isHider && !ant.bot && (ant.vx || ant.vy)) {
+        ant.pickupProgress = 0;
+        return false;
+      }
+      ant.pickupProgress += dt;
+      if (ant.pickupProgress < actionTime) return true;
+
+      src.amount--;
+      if (src.amount <= 0 && src.respawnAt === 0) {
+        src.respawnAt = this.now + CONFIG.FOOD.respawnDelay;
+      }
+      ant.carrying = true;
+      ant.pickupProgress = 0;
+      ant.depositProgress = 0;
+      ant.tripTime = 0;
+      if (ant.state !== undefined) ant.state = 'carrying';
+      this.phero.deposit(src.x, src.y, 0, CONFIG.PHEROMONE.FIELD_MAX * 0.5);
+      if (ant.isHider) this.events.push({ t: 'food_pickup', x: ant.x, y: ant.y });
+      return false;
+    }
+
+    if (dist2(ant, this.nest) >= nestR2) {
+      ant.depositProgress = 0;
+      return false;
+    }
+    ant.depositProgress += dt;
+    if (ant.depositProgress < actionTime) return true;
+
+    ant.carrying = false;
+    ant.depositProgress = 0;
+    ant.tripTime = 0;
+    if (ant.state !== undefined) ant.state = 'searching';
+    this.phero.deposit(this.nest.x, this.nest.y, 1, CONFIG.PHEROMONE.FIELD_MAX * 0.5);
+    if (ant.isHider) {
+      this.score++;
+      this.events.push({ t: 'score', score: this.score });
+      if (this.score >= this.quota && !this.over) {
+        this.over = true;
+        this.winner = ROLE.HIDER;
+        this.reason = '蚂蚁们达成了食物额度！';
+      }
+    }
+    return false;
+  }
+
+  /** 找到进入拾取范围的最近食物堆（amount > 0） */
+  _nearestFoodSource(ant) {
+    const r2 = CONFIG.FOOD.pickupRadius * CONFIG.FOOD.pickupRadius;
+    let best = null, bd = r2;
+    for (const s of this.foodSources) {
+      if (s.amount <= 0) continue;
+      const d = dist2(ant, s);
+      if (d < bd) { bd = d; best = s; }
+    }
+    return best;
   }
 
   // ---------- 主循环 ----------
@@ -248,30 +300,16 @@ export class Game {
       cfg: this.devCfg,
     };
 
-    // 更新 AI 蚂蚁
+    // 更新蚂蚁
     for (const ant of this.ants) {
       if (ant.marked) continue;
+      const foodBusy = this._processFoodAction(ant, dt);
       if (ant.isHider && !ant.bot) {
-        this._updateHider(ant, dt);
-      } else {
+        if (!foodBusy) this._updateHider(ant, dt);
+      } else if (!foodBusy) {
         updateAI(ant, dt, world);
-        // 食物堆枯竭时设置重生倒计时
-        for (const s of this.foodSources) {
-          if (s.amount <= 0 && s.respawnAt === 0) {
-            s.respawnAt = this.now + CONFIG.FOOD.respawnDelay;
-          }
-        }
       }
     }
-
-    // 标记食物刷新
-    this._foodTimer -= dt;
-    if (this._foodTimer <= 0) {
-      this._foodTimer = CONFIG.FOOD_RESPAWN_INTERVAL;
-      const avail = this.markedFood.filter(f => !f.carriedBy && !f.dropUntil).length;
-      if (avail < CONFIG.MARKED_FOOD_SLOTS) this._spawnMarkedFood();
-    }
-    this.markedFood = this.markedFood.filter(f => !(f.dropUntil && this.now > f.dropUntil));
 
     if (this.timeLeft <= 0 && !this.over) {
       this.over = true;
@@ -289,62 +327,14 @@ export class Game {
       if (dist2(ant, this.bait) < 60 * 60) ant.suspicious = this.now + 10;
     }
 
-    // 静止时自动尝试拾取标记食物（无需额外按键）
-    const moving = ant.vx || ant.vy;
-    if (!moving && !ant.hasMarkedFood) {
-      const food = this._nearestMarkedFood(ant);
-      if (food && dist2(ant, food) < 24 * 24) {
-        ant.pickupProgress += dt;
-        if (ant.pickupProgress >= CONFIG.FOOD_PICKUP_TIME) {
-          food.carriedBy = ant.id;
-          ant.hasMarkedFood = true;
-          ant.pickupProgress = 0;
-          this.events.push({ t: 'food_pickup', x: ant.x, y: ant.y });
-        }
-        return;
-      } else {
-        ant.pickupProgress = 0;
-      }
-    } else {
-      ant.pickupProgress = 0;
-    }
-
-    // 速度叠加：与 AI 共用基准速度（devCfg.AI_SPEED_BASE）× 冲刺 × 搬运
     const speedBase = this.devCfg.AI_SPEED_BASE ?? CONFIG.AI_SPEED_BASE;
     const sprintMul = ant.sprinting ? (this.devCfg.AI_SPEED?.sprint ?? CONFIG.AI_SPEED.sprint) : 1.0;
-    const carryMul  = ant.hasMarkedFood ? (this.devCfg.AI_SPEED?.carry  ?? CONFIG.AI_SPEED.carry)  : 1.0;
+    const carryMul  = ant.carrying ? (this.devCfg.AI_SPEED?.carry  ?? CONFIG.AI_SPEED.carry)  : 1.0;
     const spd = speedBase * sprintMul * carryMul;
     ant.x += ant.vx * spd * dt;
     ant.y += ant.vy * spd * dt;
     ant.x = Math.max(20, Math.min(CONFIG.WORLD_W - 20, ant.x));
     ant.y = Math.max(20, Math.min(CONFIG.WORLD_H - 20, ant.y));
-
-    if (ant.hasMarkedFood) {
-      const f = this.markedFood.find(mf => mf.carriedBy === ant.id);
-      if (f) { f.x = ant.x; f.y = ant.y; }
-      if (dist2(ant, this.nest) < 36 * 36) {
-        ant.hasMarkedFood = false;
-        this.markedFood = this.markedFood.filter(mf => mf.carriedBy !== ant.id);
-        this.score++;
-        this.events.push({ t: 'score', score: this.score });
-        if (this.score >= this.quota && !this.over) {
-          this.over = true;
-          this.winner = ROLE.HIDER;
-          this.reason = '蚂蚁们达成了食物额度！';
-        }
-        this._spawnMarkedFood();
-      }
-    }
-  }
-
-  _nearestMarkedFood(ant) {
-    let best = null, bd = Infinity;
-    for (const f of this.markedFood) {
-      if (f.carriedBy) continue;
-      const d = dist2(ant, f);
-      if (d < bd) { bd = d; best = f; }
-    }
-    return best;
   }
 
   _checkWin() {
@@ -369,20 +359,14 @@ export class Game {
         traits: a.traits,
         marked: a.marked,
         carrying: a.carrying,
-        trail: a.isHider && a.hasMarkedFood,
         suspicious: this.now < a.suspicious,
         tracked: a.id === this.trackedAntId && this.now < this.trackedUntil,
         hidden,
         isSelf: role === ROLE.HIDER && a.playerId === viewerPid,
         pickup: role === ROLE.HIDER && a.playerId === viewerPid ? +a.pickupProgress.toFixed(2) : 0,
+        deposit: role === ROLE.HIDER && a.playerId === viewerPid ? +a.depositProgress.toFixed(2) : 0,
       };
     });
-
-    const markedFood = role === ROLE.HIDER
-      ? this.markedFood
-          .filter(f => !f.carriedBy || this.ants.find(a => a.id === f.carriedBy)?.playerId === viewerPid)
-          .map(f => ({ id: f.id, x: Math.round(f.x), y: Math.round(f.y), drop: !!f.dropUntil }))
-      : [];
 
     // 信息素快照：每 2 tick 重新计算一次（降低序列化开销）
     let pheroSnap = null;
@@ -413,7 +397,7 @@ export class Game {
         amount: s.amount,
         capacity: s.capacity,
       })),
-      markedFood,
+      foodActionTime: CONFIG.FOOD_ACTION_TIME,
       nest: this.nest,
       tunnels: this.tunnels,
       thickets: this.thickets,

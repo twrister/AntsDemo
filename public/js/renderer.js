@@ -45,7 +45,6 @@ export class Renderer {
     this._drawNest(ctx, snap.nest);
     this._drawNormalFood(ctx, snap.normalFood);
     if (snap.bait) this._drawBait(ctx, snap.bait, opts.time);
-    if (snap.markedFood) this._drawMarkedFood(ctx, snap.markedFood, opts.time);
 
     for (const ant of snap.ants) {
       if (ant.hidden) { this._drawHiddenBlip(ctx, ant); continue; }
@@ -166,20 +165,6 @@ export class Renderer {
     }
   }
 
-  // 标记食物：脉动光芒 (仅隐藏者快照里存在)
-  _drawMarkedFood(ctx, food, time) {
-    const pulse = 0.5 + 0.5 * Math.sin(time / 250);
-    for (const f of food) {
-      ctx.beginPath();
-      ctx.arc(f.x, f.y, 8 + pulse * 5, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(120,220,255,${0.25 + pulse * 0.25})`;
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(f.x, f.y, 5, 0, Math.PI * 2);
-      ctx.fillStyle = f.drop ? '#ffd479' : '#7fe0ff'; ctx.fill();
-    }
-  }
-
   _drawBait(ctx, bait, time) {
     const pulse = 0.5 + 0.5 * Math.sin(time / 150);
     ctx.beginPath();
@@ -254,16 +239,22 @@ export class Renderer {
     ctx.fillStyle = body;
     ctx.beginPath(); ctx.arc(0, -r.head - 1, r.head * 0.8, 0, Math.PI * 2); ctx.fill();
 
+    // 搬运时在头部前方显示食物
+    if (ant.carrying) {
+      ctx.beginPath();
+      ctx.arc(0, -r.head - 8, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#8fb36b';
+      ctx.fill();
+      ctx.strokeStyle = '#c8e6a0';
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    }
+
     // 触角 (antenna)
     this._drawAntennae(ctx, tr.antenna, r);
 
     ctx.restore();
 
-    // 携带标记食物的淡痕 (搜寻者用滤镜可见)
-    if (ant.trail && opts.role === ROLE.SEEKER) {
-      ctx.beginPath(); ctx.arc(ant.x, ant.y, 14, 0, Math.PI * 2);
-      ctx.strokeStyle = 'rgba(127,224,255,0.45)'; ctx.lineWidth = 2; ctx.stroke();
-    }
     // 可疑标记 (诱饵)
     if (ant.suspicious && opts.role === ROLE.SEEKER) {
       ctx.fillStyle = '#d6543c'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center';
@@ -275,11 +266,17 @@ export class Renderer {
       ctx.beginPath(); ctx.moveTo(ant.x - 8, ant.y - 8); ctx.lineTo(ant.x + 8, ant.y + 8);
       ctx.moveTo(ant.x + 8, ant.y - 8); ctx.lineTo(ant.x - 8, ant.y + 8); ctx.stroke();
     }
-    // 隐藏者自身拾取引导进度环
+    // 隐藏者自身取/放食物进度环
+    const actionTime = opts.foodActionTime || 1;
     if (ant.isSelf && ant.pickup > 0) {
       ctx.beginPath();
-      ctx.arc(ant.x, ant.y, 18, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (ant.pickup / 2.5));
-      ctx.strokeStyle = '#7fe0ff'; ctx.lineWidth = 3; ctx.stroke();
+      ctx.arc(ant.x, ant.y, 18, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (ant.pickup / actionTime));
+      ctx.strokeStyle = '#8fb36b'; ctx.lineWidth = 3; ctx.stroke();
+    }
+    if (ant.isSelf && ant.deposit > 0) {
+      ctx.beginPath();
+      ctx.arc(ant.x, ant.y, 18, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (ant.deposit / actionTime));
+      ctx.strokeStyle = '#e0a93b'; ctx.lineWidth = 3; ctx.stroke();
     }
   }
 

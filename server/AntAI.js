@@ -8,14 +8,13 @@
 // 保留 flee / social 两个状态以兼容 GDD"铁律"，并维持原有导出接口不变。
 import { CONFIG } from './config.js';
 
-const { PHEROMONE: PHR, FOOD: FCFG } = CONFIG;
+const { PHEROMONE: PHR } = CONFIG;
 
 // GDD 仍用 STATES 做快照字段（前端不依赖枚举值，保持兼容）
 export const STATES = ['searching', 'carrying', 'flee', 'social'];
 
 function rand(a, b) { return a + Math.random() * (b - a); }
 function clampAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
-function dist2(a, b) { const dx = a.x - b.x, dy = a.y - b.y; return dx * dx + dy * dy; }
 
 /** 初始化一只 AI 蚂蚁的行为字段 */
 export function initAI(ant) {
@@ -105,17 +104,7 @@ function _updateSearching(ant, dt, world, cfg) {
   const depositH = PHR.DEPOSIT_HOME * Math.exp(-ant.tripTime / PHR.TAU) * dt;
   if (depositH > 0.001) phero.deposit(ant.x, ant.y, 1, depositH);
 
-  // 检测食物堆
-  const src = _nearestFoodSource(ant, world.foodSources);
-  if (src) {
-    src.amount--;
-    ant.carrying = true;
-    ant.state = 'carrying';
-    ant.tripTime = 0;
-    // 抵达食源瞬间，在食源处强沉积一次 toFood，给后来者一个强烈招募信号（正反馈）
-    phero.deposit(src.x, src.y, 0, PHR.FIELD_MAX * 0.5);
-    return;
-  }
+  // 取/放食物由 Game._processFoodAction 统一处理
 
   // 低概率进入社交（梳毛），不影响信息素场
   const socialChance = cfg.AI_SOCIAL_CHANCE ?? CONFIG.AI_SOCIAL_CHANCE;
@@ -129,8 +118,6 @@ function _updateSearching(ant, dt, world, cfg) {
 function _updateCarrying(ant, dt, world, cfg) {
   const phero = world.phero;
   const nest = world.nest;
-
-  // 朝巢穴方向走（转弯限速）；搬运倍率 carry 使速度慢于空载
   const desired = Math.atan2(nest.y - ant.y, nest.x - ant.x);
   const carryMul = cfg.AI_SPEED?.carry ?? CONFIG.AI_SPEED.carry;
   _moveToward(ant, desired, carryMul, dt, false, cfg);
@@ -139,14 +126,7 @@ function _updateCarrying(ant, dt, world, cfg) {
   const depositF = PHR.DEPOSIT_FOOD * Math.exp(-ant.tripTime / PHR.TAU) * dt;
   if (depositF > 0.001) phero.deposit(ant.x, ant.y, 0, depositF);
 
-  // 到达巢穴
-  if (dist2(ant, nest) < FCFG.nestRadius * FCFG.nestRadius) {
-    ant.carrying = false;
-    ant.state = 'searching';
-    ant.tripTime = 0;
-    // 抵达巢穴瞬间强沉积 toHome（给返程中的同伴更强的回巢信号）
-    phero.deposit(nest.x, nest.y, 1, PHR.FIELD_MAX * 0.5);
-  }
+  // 放食物由 Game._processFoodAction 统一处理
 }
 
 // ---------- 运动辅助 ----------
@@ -175,14 +155,3 @@ function _moveToward(ant, desired, speedMul, dt, instantTurn, cfg = {}) {
   if (bounced) ant.angle = clampAngle(ant.angle + Math.PI + rand(-0.5, 0.5));
 }
 
-/** 找到进入拾取范围的最近食物堆（amount > 0），若无则返回 null */
-function _nearestFoodSource(ant, sources) {
-  const r2 = FCFG.pickupRadius * FCFG.pickupRadius;
-  let best = null, bd = r2;
-  for (const s of sources) {
-    if (s.amount <= 0) continue;
-    const d = dist2(ant, s);
-    if (d < bd) { bd = d; best = s; }
-  }
-  return best;
-}

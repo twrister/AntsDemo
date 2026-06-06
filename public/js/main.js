@@ -233,7 +233,7 @@ net.on('welcome', (m) => {
   role = m.role;
   $('roleLine').innerHTML = role === ROLE.SEEKER
     ? '你的角色：<span class="role-seeker">搜寻者</span>（上帝视角，找出混入的隐藏者）'
-    : '你的角色：<span class="role-hider">隐藏者</span>（伪装成蚂蚁，收集标记食物）';
+    : '你的角色：<span class="role-hider">隐藏者</span>（伪装成蚂蚁，搬运食物回巢）';
 });
 
 net.on('lobby', (m) => {
@@ -290,7 +290,7 @@ function loop(now) {
   const snap = net.interpolated();
   if (snap && controller) {
     const opts = controller.update(snap, dt);
-    renderer.draw(snap, opts.cam, { ...opts, role, world, time: now, showPheromone });
+    renderer.draw(snap, opts.cam, { ...opts, role, world, time: now, showPheromone, foodActionTime: snap.foodActionTime });
     updateHud(snap);
   }
   requestAnimationFrame(loop);
@@ -323,7 +323,7 @@ function handleEvent(e) {
   switch (e.t) {
     case 'mark_hit': toast('标记命中！隐藏者被淘汰', 'good'); break;
     case 'mark_miss': toast('误标记！工具锁死中', 'bad'); break;
-    case 'food_pickup': if (role === ROLE.HIDER) toast('拿到标记食物，送回巢穴', 'good'); break;
+    case 'food_pickup': if (role === ROLE.HIDER) toast('拿到食物，送回巢穴', 'good'); break;
     case 'score': toast(`食物已送达 (${e.score})`, 'good'); break;
     case 'tool': if (role === ROLE.SEEKER) toast(`使用了工具`, ''); break;
   }

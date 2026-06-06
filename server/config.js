@@ -10,14 +10,10 @@ export const CONFIG = {
   MATCH_DURATION: 600,      // 单局时长 (秒)，基准 600
   AI_ANT_COUNT: 30,         // 地图 AI 蚂蚁数量
   MIN_HIDERS: 1,            // 最少隐藏者(不足用 AI 占位)
-  // 标记食物目标公式：目标 = 2 + 隐藏者人数
+  // 食物配额目标公式：目标 = 2 + 隐藏者人数
   foodQuota: (hiderCount) => 2 + hiderCount,
 
-  // 标记食物
-  MARKED_FOOD_SLOTS: 3,         // 同时存在的标记食物数
-  FOOD_RESPAWN_INTERVAL: 90,    // 刷新间隔 (秒)
-  FOOD_PICKUP_TIME: 2.5,        // 原地引导拾取时间 (秒)
-  FOOD_DROP_DESPAWN: 15,        // 掉落食物消失时间 (秒)
+  FOOD_ACTION_TIME: 1,          // 取食物 / 放食物等待时间 (秒)
 
   // 外观破绽
   TRAIT_DEVIANCE_VISIBILITY: 0.15, // 特征偏差可见度 15%

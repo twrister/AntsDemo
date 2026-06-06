@@ -1,7 +1,7 @@
 // 核心模拟 (GDD 3.2 / 3.3 / 3.4 / 3.5)。权威服务器逻辑：蚂蚁、食物、信息素、工具、胜负判定。
 import { CONFIG } from './config.js';
 import { randomTraits, deriveHiderTraits } from './traits.js';
-import { initAI, updateAI, triggerFlee } from './AntAI.js';
+import { initAI, updateAI, triggerFlee, depositTrail } from './AntAI.js';
 import { PheromoneField } from './Pheromone.js';
 import { ROLE } from './protocol.js';
 
@@ -119,6 +119,7 @@ export class Game {
       pickupProgress: 0,
       depositProgress: 0,
       inTunnelUntil: 0,
+      tripTime: isHider ? rand(0, CONFIG.PHEROMONE.TAU) : 0,
     };
     if (!isHider) initAI(ant);
     return ant;
@@ -331,10 +332,14 @@ export class Game {
     const sprintMul = ant.sprinting ? (this.devCfg.AI_SPEED?.sprint ?? CONFIG.AI_SPEED.sprint) : 1.0;
     const carryMul  = ant.carrying ? (this.devCfg.AI_SPEED?.carry  ?? CONFIG.AI_SPEED.carry)  : 1.0;
     const spd = speedBase * sprintMul * carryMul;
+    if (!ant.vx && !ant.vy) return;
+
+    ant.tripTime += dt;
     ant.x += ant.vx * spd * dt;
     ant.y += ant.vy * spd * dt;
     ant.x = Math.max(20, Math.min(CONFIG.WORLD_W - 20, ant.x));
     ant.y = Math.max(20, Math.min(CONFIG.WORLD_H - 20, ant.y));
+    depositTrail(ant, dt, this.phero);
   }
 
   _checkWin() {

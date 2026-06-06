@@ -25,6 +25,19 @@ export function initAI(ant) {
   ant.angle = rand(-Math.PI, Math.PI);
 }
 
+/**
+ * 蚂蚁沿途沉积信息素：搜寻态释放 toHome，搬运态释放 toFood，强度随 tripTime 衰减。
+ */
+export function depositTrail(ant, dt, phero) {
+  if (!ant.carrying) {
+    const depositH = PHR.DEPOSIT_HOME * Math.exp(-ant.tripTime / PHR.TAU) * dt;
+    if (depositH > 0.001) phero.deposit(ant.x, ant.y, 1, depositH);
+  } else {
+    const depositF = PHR.DEPOSIT_FOOD * Math.exp(-ant.tripTime / PHR.TAU) * dt;
+    if (depositF > 0.001) phero.deposit(ant.x, ant.y, 0, depositF);
+  }
+}
+
 /** 触发逃跑（恐慌信息素 / 环境威胁），兼容 Game.js 调用 */
 export function triggerFlee(ant, duration) {
   ant.state = 'flee';
@@ -100,9 +113,7 @@ function _updateSearching(ant, dt, world, cfg) {
   // 搜寻态：基准速度 × 1.0（无额外倍率）
   _moveToward(ant, desired, 1.0, dt, false, cfg);
 
-  // 沉积 toHome（channel 1），强度随离巢时间指数衰减（越靠食源越弱）
-  const depositH = PHR.DEPOSIT_HOME * Math.exp(-ant.tripTime / PHR.TAU) * dt;
-  if (depositH > 0.001) phero.deposit(ant.x, ant.y, 1, depositH);
+  depositTrail(ant, dt, phero);
 
   // 取/放食物由 Game._processFoodAction 统一处理
 
@@ -122,9 +133,7 @@ function _updateCarrying(ant, dt, world, cfg) {
   const carryMul = cfg.AI_SPEED?.carry ?? CONFIG.AI_SPEED.carry;
   _moveToward(ant, desired, carryMul, dt, false, cfg);
 
-  // 沉积 toFood（channel 0），强度随离食源时间衰减（越靠巢越弱）
-  const depositF = PHR.DEPOSIT_FOOD * Math.exp(-ant.tripTime / PHR.TAU) * dt;
-  if (depositF > 0.001) phero.deposit(ant.x, ant.y, 0, depositF);
+  depositTrail(ant, dt, phero);
 
   // 放食物由 Game._processFoodAction 统一处理
 }

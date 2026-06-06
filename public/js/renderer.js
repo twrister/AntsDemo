@@ -110,7 +110,7 @@ export class Renderer {
   /**
    * 绘制信息素场（地面层）。
    * toFood（青色）：引导搜寻者前往食物的轨迹。
-   * toHome（橙色）：引导搬运者回巢的轨迹。
+   * toHome（品红）：引导搬运者回巢的轨迹。
    * 两层叠加后呈现出蚁群真实走廊的双向颜色。
    */
   _drawPheromone(ctx, phero) {
@@ -127,9 +127,9 @@ export class Renderer {
           ctx.fillStyle = `rgba(80,220,200,${(f / 255 * 0.45).toFixed(3)})`;
           ctx.fillRect(x, y, cell, cell);
         }
-        // toHome 橙色：rgba(255, 160, 40, alpha)
+        // toHome 品红：rgba(230, 80, 200, alpha)，与棕褐地面和青色 toFood 均易区分
         if (h >= 4) {
-          ctx.fillStyle = `rgba(255,160,40,${(h / 255 * 0.40).toFixed(3)})`;
+          ctx.fillStyle = `rgba(230,80,200,${(h / 255 * 0.42).toFixed(3)})`;
           ctx.fillRect(x, y, cell, cell);
         }
       }

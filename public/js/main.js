@@ -22,7 +22,10 @@ let showPheromone = true;
 // ---- DOM helpers ----
 const $ = (id) => document.getElementById(id);
 
-// ---- 开发者工具 ----
+/** 调试端口页面标记（debug.html 上 data-debug="true"） */
+const DEBUG_MODE = document.body.dataset.debug === 'true';
+
+// ---- 开发者工具（仅调试端口） ----
 
 const AI_ANT_COUNT_MIN = 10;
 const AI_ANT_COUNT_MAX = 200;
@@ -41,6 +44,7 @@ const DEV_DEFAULTS = {
 const DEV_STORAGE_KEY = 'antsDemo_devCfg';
 
 function persistDevConfig() {
+  if (!DEBUG_MODE) return;
   const cfg = {
     AI_ANT_COUNT: parseInt($('devAntCount').value, 10),
     AI_SPEED_BASE: parseFloat($('devSpeedBase').value),
@@ -62,6 +66,7 @@ function applyBeamSpeedToWorld(beamSpeed) {
 }
 
 function restoreDevConfig() {
+  if (!DEBUG_MODE) return;
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(DEV_STORAGE_KEY) || '{}'); } catch (_) {}
   const c = { ...DEV_DEFAULTS, ...saved, AI_SPEED: { ...DEV_DEFAULTS.AI_SPEED, ...(saved.AI_SPEED || {}) } };
@@ -93,6 +98,7 @@ function restoreDevConfig() {
 restoreDevConfig();
 
 function sendDevConfig() {
+  if (!DEBUG_MODE) return;
   persistDevConfig();
   net.send({
     type: 'dev_config',
@@ -114,6 +120,7 @@ function sendDevConfig() {
 function bindSlider(id, valId, decimals) {
   const inp = $(id);
   const valEl = $(valId);
+  if (!inp || !valEl) return;
   let timer = null;
   inp.addEventListener('input', () => {
     const n = parseFloat(inp.value);
@@ -123,46 +130,56 @@ function bindSlider(id, valId, decimals) {
   });
 }
 
-bindSlider('devAntCount', 'devAntCountVal', 0);
-bindSlider('devSpeedBase', 'devSpeedBaseVal', 0);
-bindSlider('devTurnSmooth', 'devTurnSmoothVal', 2);
-bindSlider('devSocialChance', 'devSocialChanceVal', 3);
-bindSlider('devSpeedSprint', 'devSpeedSprintVal', 2);
-bindSlider('devSpeedCarry', 'devSpeedCarryVal', 2);
-bindSlider('devFoodCount', 'devFoodCountVal', 0);
-bindSlider('devFoodCapacity', 'devFoodCapacityVal', 0);
-bindSlider('devBeamSpeed', 'devBeamSpeedVal', 0);
+if (DEBUG_MODE) {
+  bindSlider('devAntCount', 'devAntCountVal', 0);
+  bindSlider('devSpeedBase', 'devSpeedBaseVal', 0);
+  bindSlider('devTurnSmooth', 'devTurnSmoothVal', 2);
+  bindSlider('devSocialChance', 'devSocialChanceVal', 3);
+  bindSlider('devSpeedSprint', 'devSpeedSprintVal', 2);
+  bindSlider('devSpeedCarry', 'devSpeedCarryVal', 2);
+  bindSlider('devFoodCount', 'devFoodCountVal', 0);
+  bindSlider('devFoodCapacity', 'devFoodCapacityVal', 0);
+  bindSlider('devBeamSpeed', 'devBeamSpeedVal', 0);
 
-$('devReset').addEventListener('click', () => {
-  localStorage.removeItem(DEV_STORAGE_KEY);
-  $('devAntCount').value = DEV_DEFAULTS.AI_ANT_COUNT;
-  $('devAntCountVal').textContent = DEV_DEFAULTS.AI_ANT_COUNT;
-  $('devSpeedBase').value = DEV_DEFAULTS.AI_SPEED_BASE;
-  $('devSpeedBaseVal').textContent = DEV_DEFAULTS.AI_SPEED_BASE;
-  $('devTurnSmooth').value = DEV_DEFAULTS.AI_TURN_SMOOTH;
-  $('devTurnSmoothVal').textContent = DEV_DEFAULTS.AI_TURN_SMOOTH.toFixed(2);
-  $('devSocialChance').value = DEV_DEFAULTS.AI_SOCIAL_CHANCE;
-  $('devSocialChanceVal').textContent = DEV_DEFAULTS.AI_SOCIAL_CHANCE.toFixed(3);
-  $('devSpeedSprint').value = DEV_DEFAULTS.AI_SPEED.sprint;
-  $('devSpeedSprintVal').textContent = DEV_DEFAULTS.AI_SPEED.sprint.toFixed(2);
-  $('devSpeedCarry').value = DEV_DEFAULTS.AI_SPEED.carry;
-  $('devSpeedCarryVal').textContent = DEV_DEFAULTS.AI_SPEED.carry.toFixed(2);
-  $('devFoodCount').value = DEV_DEFAULTS.FOOD_COUNT;
-  $('devFoodCountVal').textContent = DEV_DEFAULTS.FOOD_COUNT;
-  $('devFoodCapacity').value = DEV_DEFAULTS.FOOD_CAPACITY;
-  $('devFoodCapacityVal').textContent = DEV_DEFAULTS.FOOD_CAPACITY;
-  $('devBeamSpeed').value = DEV_DEFAULTS.BEAM_SPEED;
-  $('devBeamSpeedVal').textContent = DEV_DEFAULTS.BEAM_SPEED;
-  sendDevConfig();
-});
+  $('devReset').addEventListener('click', () => {
+    localStorage.removeItem(DEV_STORAGE_KEY);
+    $('devAntCount').value = DEV_DEFAULTS.AI_ANT_COUNT;
+    $('devAntCountVal').textContent = DEV_DEFAULTS.AI_ANT_COUNT;
+    $('devSpeedBase').value = DEV_DEFAULTS.AI_SPEED_BASE;
+    $('devSpeedBaseVal').textContent = DEV_DEFAULTS.AI_SPEED_BASE;
+    $('devTurnSmooth').value = DEV_DEFAULTS.AI_TURN_SMOOTH;
+    $('devTurnSmoothVal').textContent = DEV_DEFAULTS.AI_TURN_SMOOTH.toFixed(2);
+    $('devSocialChance').value = DEV_DEFAULTS.AI_SOCIAL_CHANCE;
+    $('devSocialChanceVal').textContent = DEV_DEFAULTS.AI_SOCIAL_CHANCE.toFixed(3);
+    $('devSpeedSprint').value = DEV_DEFAULTS.AI_SPEED.sprint;
+    $('devSpeedSprintVal').textContent = DEV_DEFAULTS.AI_SPEED.sprint.toFixed(2);
+    $('devSpeedCarry').value = DEV_DEFAULTS.AI_SPEED.carry;
+    $('devSpeedCarryVal').textContent = DEV_DEFAULTS.AI_SPEED.carry.toFixed(2);
+    $('devFoodCount').value = DEV_DEFAULTS.FOOD_COUNT;
+    $('devFoodCountVal').textContent = DEV_DEFAULTS.FOOD_COUNT;
+    $('devFoodCapacity').value = DEV_DEFAULTS.FOOD_CAPACITY;
+    $('devFoodCapacityVal').textContent = DEV_DEFAULTS.FOOD_CAPACITY;
+    $('devBeamSpeed').value = DEV_DEFAULTS.BEAM_SPEED;
+    $('devBeamSpeedVal').textContent = DEV_DEFAULTS.BEAM_SPEED;
+    sendDevConfig();
+  });
 
-$('devPheroCheck').addEventListener('change', () => {
-  setPheroVisible($('devPheroCheck').checked);
-});
+  $('devPheroCheck').addEventListener('change', () => {
+    setPheroVisible($('devPheroCheck').checked);
+  });
+
+  function toggleDevPanel() { $('devPanel').classList.toggle('hidden'); }
+  $('devPanelBtn').addEventListener('click', toggleDevPanel);
+  $('devClose').addEventListener('click', () => $('devPanel').classList.add('hidden'));
+  window.addEventListener('keydown', (e) => {
+    if (e.key === '`' || e.key === '~') { e.preventDefault(); toggleDevPanel(); }
+  });
+}
 
 function setPheroVisible(visible) {
   showPheromone = visible;
-  $('devPheroCheck').checked = visible;
+  const devCheck = $('devPheroCheck');
+  if (devCheck) devCheck.checked = visible;
   const btn = $('pheroToggleBtn');
   btn.textContent = visible ? '信息素' : '信息素(关)';
   btn.classList.toggle('phero-on', visible);
@@ -170,13 +187,6 @@ function setPheroVisible(visible) {
 }
 
 $('pheroToggleBtn').addEventListener('click', () => setPheroVisible(!showPheromone));
-
-function toggleDevPanel() { $('devPanel').classList.toggle('hidden'); }
-$('devPanelBtn').addEventListener('click', toggleDevPanel);
-$('devClose').addEventListener('click', () => $('devPanel').classList.add('hidden'));
-window.addEventListener('keydown', (e) => {
-  if (e.key === '`' || e.key === '~') { e.preventDefault(); toggleDevPanel(); }
-});
 
 // ---- 连接 ----
 
@@ -258,10 +268,12 @@ async function joinRoom(roomId) {
   net.send({ type: 'join_room', name, roomId });
 }
 
-// ---- 单机调试 ----
+// ---- 单机调试（仅调试端口） ----
 
-$('soloSeekerBtn').addEventListener('click', () => startSolo(ROLE.SEEKER));
-$('soloHiderBtn').addEventListener('click', () => startSolo(ROLE.HIDER));
+if (DEBUG_MODE) {
+  $('soloSeekerBtn').addEventListener('click', () => startSolo(ROLE.SEEKER));
+  $('soloHiderBtn').addEventListener('click', () => startSolo(ROLE.HIDER));
+}
 
 async function startSolo(soloRole) {
   await ensureConnected();
@@ -404,6 +416,7 @@ function updateHud(snap) {
 }
 
 function updateDevAntStats(snap) {
+  if (!DEBUG_MODE) return;
   if (!snap?.antStats) {
     $('devStatAi').textContent = running ? '…' : '—';
     $('devStatHider').textContent = '—';

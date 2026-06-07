@@ -71,7 +71,8 @@ export class Game {
 
   _buildWorld(hiderPlayers) {
     // 可枯竭食物堆：分散在地图各处，远离巢穴
-    this._spawnFoodSources(CONFIG.FOOD.count);
+    this._spawnFoodSources(CONFIG.FOOD.count, 'normal');
+    this._spawnFoodSources(CONFIG.FOOD.RICH.count, 'rich');
 
     // 生成 AI 蚂蚁
     for (let i = 0; i < CONFIG.AI_ANT_COUNT; i++) {
@@ -97,9 +98,44 @@ export class Game {
     }
   }
 
-  /** 获取当前生效的食物堆容量（开发者工具可热改） */
+  /** 获取指定类型食物堆的配置 */
+  _foodTypeConfig(type = 'normal') {
+    return type === 'rich' ? CONFIG.FOOD.RICH : CONFIG.FOOD;
+  }
+
+  /** 获取当前生效的每堆容量（两种食物共用，开发者工具可热改） */
   _foodCapacity() {
     return this.devCfg.FOOD_CAPACITY ?? CONFIG.FOOD.capacity;
+  }
+
+  /** 食物生成距巢最小距离（约 1/3 屏） */
+  _foodMinDist() {
+    const ratio = CONFIG.NEST.foodMinDistRatio ?? (1 / 3);
+    return Math.min(CONFIG.WORLD_W, CONFIG.WORLD_H) * ratio;
+  }
+
+  /** 在地图上随机取一点，保证距巢足够远 */
+  _randomFoodPos(maxAttempts = 200) {
+    const nestX = this.nest.x, nestY = this.nest.y;
+    const minDist2 = this._foodMinDist() ** 2;
+    for (let i = 0; i < maxAttempts; i++) {
+      const x = rand(80, CONFIG.WORLD_W - 80);
+      const y = rand(200, CONFIG.WORLD_H - 80);
+      if ((x - nestX) ** 2 + (y - nestY) ** 2 >= minDist2) return { x, y };
+    }
+    return null;
+  }
+
+  /** 根据当前搬运的食物类型返回速度倍率（普通/珍稀分别可配） */
+  _carryMulFor(ant) {
+    if (!ant.carrying) return 1.0;
+    const isRich = ant.carryingType === 'rich';
+    if (isRich) {
+      if (this.devCfg.AI_SPEED?.carryRich !== undefined) return this.devCfg.AI_SPEED.carryRich;
+      return CONFIG.FOOD.RICH.carryMul ?? CONFIG.AI_SPEED.carry;
+    }
+    if (this.devCfg.AI_SPEED?.carry !== undefined) return this.devCfg.AI_SPEED.carry;
+    return CONFIG.FOOD.carryMul ?? CONFIG.AI_SPEED.carry;
   }
 
   /** 强光/嗅探光束跟随速度（像素/秒，开发者工具可热改） */
@@ -147,21 +183,20 @@ export class Game {
     };
   }
 
-  /** 在地图上随机生成 n 个食物堆，保证距巢足够远 */
-  _spawnFoodSources(n) {
+  /** 在地图上随机生成 n 个指定类型的食物堆，保证距巢足够远 */
+  _spawnFoodSources(n, type = 'normal') {
     const capacity = this._foodCapacity();
-    const nestX = this.nest.x, nestY = this.nest.y;
-    const minDist = CONFIG.NEST.foodMinDist;
-    const minDist2 = minDist * minDist;
     const target = this.foodSources.length + n;
     let nextId = this.foodSources.length;
     let attempts = 0;
     while (this.foodSources.length < target && attempts < 200) {
       attempts++;
-      const x = rand(80, CONFIG.WORLD_W - 80);
-      const y = rand(200, CONFIG.WORLD_H - 80);
-      if ((x - nestX) ** 2 + (y - nestY) ** 2 < minDist2) continue;
-      this.foodSources.push({ id: nextId++, x, y, amount: capacity, capacity, respawnAt: 0 });
+      const pos = this._randomFoodPos();
+      if (!pos) continue;
+      this.foodSources.push({
+        id: nextId++, type, x: pos.x, y: pos.y,
+        amount: capacity, capacity, respawnAt: 0,
+      });
     }
   }
 
@@ -174,6 +209,7 @@ export class Game {
       angle: rand(-Math.PI, Math.PI),
       traits: randomTraits(),
       carrying: false,
+      carryingType: null,
       markedUntil: 0,   // 被标中冻结截止时刻；0 表示正常
       lives: isHider ? CONFIG.HIDER_LIVES : 0,
       eliminated: false, // 生命归零或玩家离场等永久出局
@@ -235,6 +271,7 @@ export class Game {
       ant.sprinting = false;
       if (ant.carrying) {
         ant.carrying = false;
+        ant.carryingType = null;
         ant.pickupProgress = 0;
         ant.depositProgress = 0;
       }
@@ -391,9 +428,11 @@ export class Game {
 
       src.amount--;
       if (src.amount <= 0 && src.respawnAt === 0) {
-        src.respawnAt = this.now + CONFIG.FOOD.respawnDelay;
+        const delay = this._foodTypeConfig(src.type).respawnDelay ?? CONFIG.FOOD.respawnDelay;
+        src.respawnAt = this.now + delay;
       }
       ant.carrying = true;
+      ant.carryingType = src.type || 'normal';
       ant.pickupProgress = 0;
       ant.depositProgress = 0;
       ant.tripTime = 0;
@@ -410,13 +449,16 @@ export class Game {
     ant.depositProgress += dt;
     if (ant.depositProgress < actionTime) return true;
 
+    const depositedType = ant.carryingType ?? 'normal';
     ant.carrying = false;
+    ant.carryingType = null;
     ant.depositProgress = 0;
     ant.tripTime = 0;
     if (ant.state !== undefined) ant.state = 'searching';
     this.phero.deposit(deposit.x, deposit.y, 1, CONFIG.PHEROMONE.FIELD_MAX * 0.5);
     if (ant.isHider) {
-      ant.foodScore++;
+      const scoreGain = this._foodTypeConfig(depositedType).score ?? 1;
+      ant.foodScore += scoreGain;
       this.events.push({ t: 'score', antId: ant.id, playerId: ant.playerId, score: ant.foodScore, label: ant.hiderLabel });
       if (!ant.verified && ant.foodScore >= this.hiderQuota) {
         ant.verified = true;
@@ -457,8 +499,8 @@ export class Game {
       if (s.amount <= 0 && s.respawnAt > 0 && this.now >= s.respawnAt) {
         s.capacity = this._foodCapacity();
         s.amount = s.capacity;
-        s.x = rand(80, CONFIG.WORLD_W - 80);
-        s.y = rand(200, CONFIG.WORLD_H - 80);
+        const pos = this._randomFoodPos();
+        if (pos) { s.x = pos.x; s.y = pos.y; }
         s.respawnAt = 0;
       }
     }
@@ -515,7 +557,7 @@ export class Game {
 
     const speedBase = this.devCfg.AI_SPEED_BASE ?? CONFIG.AI_SPEED_BASE;
     const sprintMul = ant.sprinting ? (this.devCfg.AI_SPEED?.sprint ?? CONFIG.AI_SPEED.sprint) : 1.0;
-    const carryMul  = ant.carrying ? (this.devCfg.AI_SPEED?.carry  ?? CONFIG.AI_SPEED.carry)  : 1.0;
+    const carryMul = this._carryMulFor(ant);
     const spd = speedBase * sprintMul * carryMul;
     if (!ant.vx && !ant.vy) return;
 
@@ -536,6 +578,7 @@ export class Game {
     ant.vx = ant.vy = 0;
     ant.sprinting = false;
     ant.carrying = false;
+    ant.carryingType = null;
     ant.pickupProgress = 0;
     ant.depositProgress = 0;
     ant.tripTime = rand(0, CONFIG.PHEROMONE.TAU);
@@ -604,6 +647,7 @@ export class Game {
         }),
         verified: !!a.verified,
         carrying: a.carrying,
+        carryingType: a.carrying ? (a.carryingType || 'normal') : null,
         suspicious: this.now < a.suspicious,
         isSelf: role === ROLE.HIDER && a.playerId === viewerPid,
         // 隐藏者方始终可见队友色；搜寻者仅对已获证的隐藏者下发真色
@@ -641,6 +685,8 @@ export class Game {
         y: Math.round(s.y),
         amount: s.amount,
         capacity: s.capacity,
+        type: s.type || 'normal',
+        score: this._foodTypeConfig(s.type).score ?? 1,
       })),
       foodActionTime: CONFIG.FOOD_ACTION_TIME,
       nest: {
@@ -698,16 +744,19 @@ export class Game {
   drainEvents() { const e = this.events; this.events = []; return e; }
 
   /**
-   * 动态调整食物堆数量，立即生效。
-   * 增加时在随机位置生成新堆；减少时从末尾移除。
+   * 动态调整普通食物堆数量，珍稀食物不受影响。
+   * 增加时在随机位置生成新堆；减少时从普通食物末尾移除。
    */
   _adjustFoodCount(targetCount) {
     const clamped = Math.max(1, Math.min(20, Math.round(targetCount)));
-    const current = this.foodSources.length;
+    const rich = this.foodSources.filter(s => s.type === 'rich');
+    let normal = this.foodSources.filter(s => s.type !== 'rich');
+    const current = normal.length;
     if (clamped > current) {
-      this._spawnFoodSources(clamped - current);
+      this._spawnFoodSources(clamped - current, 'normal');
     } else if (clamped < current) {
-      this.foodSources = this.foodSources.slice(0, clamped);
+      normal = normal.slice(0, clamped);
+      this.foodSources = [...normal, ...rich];
     }
   }
 
@@ -727,7 +776,7 @@ export class Game {
   /**
    * 更新开发者调试参数（运行时热修改 AI 行为，不重启对局）。
    * 所有参数下一帧即生效（speed/turn 逐帧读取；ant count 立即增删蚂蚁）。
-   * 支持字段：AI_SPEED_BASE / AI_TURN_SMOOTH / AI_SOCIAL_CHANCE / AI_SPEED / AI_ANT_COUNT / FOOD_COUNT / FOOD_CAPACITY / BEAM_SPEED / SNIFF_RADIUS
+   * 支持字段：AI_SPEED_BASE / AI_TURN_SMOOTH / AI_SOCIAL_CHANCE / AI_SPEED（含 carry / carryRich）/ AI_ANT_COUNT / FOOD_COUNT / FOOD_CAPACITY / BEAM_SPEED / SNIFF_RADIUS
    */
   setDevConfig(params) {
     if (params.AI_SPEED_BASE !== undefined) this.devCfg.AI_SPEED_BASE = +params.AI_SPEED_BASE;

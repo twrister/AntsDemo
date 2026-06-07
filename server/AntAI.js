@@ -142,12 +142,23 @@ function _updateCarrying(ant, dt, world, cfg) {
   // 回巢目标为巢内食物堆放点（非巢心）
   const dep = world.nest.deposit || world.nest;
   const desired = Math.atan2(dep.y - ant.y, dep.x - ant.x);
-  const carryMul = cfg.AI_SPEED?.carry ?? CONFIG.AI_SPEED.carry;
+  const carryMul = _carryMulFor(ant, cfg);
   _moveToward(ant, desired, carryMul, dt, false, cfg);
 
   depositTrail(ant, dt, phero);
 
   // 放食物由 Game._processFoodAction 统一处理
+}
+
+/** 按搬运中的食物类型返回速度倍率（普通/珍稀分别可配） */
+function _carryMulFor(ant, cfg) {
+  const isRich = ant.carryingType === 'rich';
+  if (isRich) {
+    if (cfg.AI_SPEED?.carryRich !== undefined) return cfg.AI_SPEED.carryRich;
+    return CONFIG.FOOD.RICH.carryMul ?? CONFIG.AI_SPEED.carry;
+  }
+  if (cfg.AI_SPEED?.carry !== undefined) return cfg.AI_SPEED.carry;
+  return CONFIG.FOOD.carryMul ?? CONFIG.AI_SPEED.carry;
 }
 
 // ---------- 运动辅助 ----------

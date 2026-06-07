@@ -195,32 +195,36 @@ export class Renderer {
     }
   }
 
-  /** 绘制可枯竭食物堆：按剩余量/容量比例决定圆点大小与颜色深浅，并标注剩余数量 */
+  /** 绘制可枯竭食物堆：按剩余量/容量比例决定圆点大小与颜色深浅 */
   _drawNormalFood(ctx, food) {
     if (!food) return;
     for (const f of food) {
       if (f.amount <= 0) continue;
+      const isRich = f.type === 'rich';
       const ratio = (f.capacity > 0) ? f.amount / f.capacity : 0;
-      const r = 4 + ratio * 8;         // 半径 4-12px，满堆最大
-      const alpha = 0.4 + ratio * 0.6; // 枯竭时变淡
+      const r = isRich ? 6 + ratio * 10 : 4 + ratio * 8;
+      const alpha = 0.4 + ratio * 0.6;
+      const fill = isRich ? `rgba(224,169,59,${alpha.toFixed(2)})` : `rgba(143,179,107,${alpha.toFixed(2)})`;
+      const stroke = isRich ? `rgba(255,220,120,${(alpha * 0.7).toFixed(2)})` : `rgba(200,230,160,${(alpha * 0.6).toFixed(2)})`;
       ctx.beginPath();
       ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(143,179,107,${alpha.toFixed(2)})`;
+      ctx.fillStyle = fill;
       ctx.fill();
-      // 外圈轮廓（帮助搜寻者注意到食物堆）
-      ctx.strokeStyle = `rgba(200,230,160,${(alpha * 0.6).toFixed(2)})`;
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = isRich ? 2 : 1.5;
       ctx.stroke();
-      // 剩余数量文字（带描边提升可读性）
-      const label = String(f.amount);
-      ctx.font = 'bold 11px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = 'rgba(20,16,10,0.85)';
-      ctx.strokeText(label, f.x, f.y);
-      ctx.fillStyle = '#e8f4d0';
-      ctx.fillText(label, f.x, f.y);
+      // 珍稀食物标注单次得分（如 ×3）
+      if (isRich) {
+        const label = `×${f.score || 3}`;
+        ctx.font = 'bold 12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(20,16,10,0.85)';
+        ctx.strokeText(label, f.x, f.y);
+        ctx.fillStyle = '#fff4d0';
+        ctx.fillText(label, f.x, f.y);
+      }
     }
   }
 
@@ -364,14 +368,15 @@ export class Renderer {
     ctx.fillStyle = body;
     ctx.beginPath(); ctx.arc(0, -r.head - 1, r.head * 0.8, 0, Math.PI * 2); ctx.fill();
 
-    // 搬运时在头部前方显示食物
+    // 搬运时在头部前方显示食物（珍稀食物为金色且更大）
     if (ant.carrying) {
+      const isRich = ant.carryingType === 'rich';
       ctx.beginPath();
-      ctx.arc(0, -r.head - 8, 4.5, 0, Math.PI * 2);
-      ctx.fillStyle = '#8fb36b';
+      ctx.arc(0, -r.head - 8, isRich ? 6 : 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = isRich ? '#e0a93b' : '#8fb36b';
       ctx.fill();
-      ctx.strokeStyle = '#c8e6a0';
-      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = isRich ? '#ffe080' : '#c8e6a0';
+      ctx.lineWidth = isRich ? 1.6 : 1.2;
       ctx.stroke();
     }
 

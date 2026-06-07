@@ -42,8 +42,8 @@ export const CONFIG = {
   AI_TURN_SMOOTH: 0.3,      // 转弯减速曲线 (秒)
   AI_SOCIAL_CHANCE: 0.05,   // 空闲触发社交概率
   AI_SPEED_BASE: 60,        // 基准速度 (像素/秒)
-  /** 速度叠加倍率：最终速度 = base × (加速中 ? sprint : 1.0) × (搬运中 ? carry : 1.0) */
-  AI_SPEED: { sprint: 1.5, carry: 0.8 },
+  /** 速度叠加倍率：最终速度 = base × (加速中 ? sprint : 1.0) × (搬运中 ? carry/carryRich : 1.0) */
+  AI_SPEED: { sprint: 1.5, carry: 0.8 }, // carry 普通食物默认；珍稀见 FOOD.RICH.carryMul，调试端口可热改 carryRich
 
   // 玩家移动基准速度与 AI_SPEED_BASE 共用，见 Game._updateHider / AntAI._moveToward
 
@@ -73,14 +73,24 @@ export const CONFIG = {
     depositRadius: 30,      // 巢内食物堆放点交互半径
     depositOffsetX: 0,      // 堆放点相对巢心的偏移
     depositOffsetY: 18,
-    foodMinDist: 200,       // 地图食物堆距巢心最小距离
+    /** 食物堆距巢最小距离 = min(WORLD_W, WORLD_H) × 比例（约 1/3 屏，fit 缩放下） */
+    foodMinDistRatio: 1 / 3,
   },
 
   // ---------- 可枯竭食物堆 ----------
   FOOD: {
-    count: 5,               // 地图同时存在的食物堆数量
-    capacity: 60,           // 每堆初始容量（可搬运次数）
-    respawnDelay: 30,       // 食物堆枯竭后延时重生（秒）
+    count: 5,               // 普通食物堆数量
+    capacity: 60,           // 每堆容量（两种食物共用，可搬运次数）
+    respawnDelay: 30,       // 普通食物堆枯竭后延时重生（秒）
+    score: 1,               // 普通食物单次得分
+    carryMul: 0.8,          // 搬运普通食物时的速度倍率
     pickupRadius: 18,       // 蚂蚁进入此范围触发拾取
+    /** 珍稀食物：单次 3 分、搬运更慢、堆数更少（容量与普通食物共用 FOOD.capacity） */
+    RICH: {
+      count: 2,
+      respawnDelay: 45,
+      score: 3,
+      carryMul: 0.5,
+    },
   },
 };

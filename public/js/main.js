@@ -35,7 +35,7 @@ const DEV_DEFAULTS = {
   AI_SPEED_BASE: 60,
   AI_TURN_SMOOTH: 0.3,
   AI_SOCIAL_CHANCE: 0.05,
-  AI_SPEED: { sprint: 1.5, carry: 0.8 },
+  AI_SPEED: { sprint: 1.5, carry: 0.8, carryRich: 0.5 },
   FOOD_COUNT: 5,
   FOOD_CAPACITY: 60,
   BEAM_SPEED: 280,
@@ -54,6 +54,7 @@ function persistDevConfig() {
     AI_SPEED: {
       sprint: parseFloat($('devSpeedSprint').value),
       carry: parseFloat($('devSpeedCarry').value),
+      carryRich: parseFloat($('devSpeedCarryRich').value),
     },
     FOOD_COUNT: parseInt($('devFoodCount').value, 10),
     FOOD_CAPACITY: parseInt($('devFoodCapacity').value, 10),
@@ -94,6 +95,8 @@ function restoreDevConfig() {
   $('devSpeedSprintVal').textContent = c.AI_SPEED.sprint.toFixed(2);
   $('devSpeedCarry').value = c.AI_SPEED.carry;
   $('devSpeedCarryVal').textContent = c.AI_SPEED.carry.toFixed(2);
+  $('devSpeedCarryRich').value = c.AI_SPEED.carryRich;
+  $('devSpeedCarryRichVal').textContent = c.AI_SPEED.carryRich.toFixed(2);
   $('devFoodCount').value = c.FOOD_COUNT;
   $('devFoodCountVal').textContent = c.FOOD_COUNT;
   $('devFoodCapacity').value = c.FOOD_CAPACITY;
@@ -120,6 +123,7 @@ function sendDevConfig() {
     AI_SPEED: {
       sprint: parseFloat($('devSpeedSprint').value),
       carry: parseFloat($('devSpeedCarry').value),
+      carryRich: parseFloat($('devSpeedCarryRich').value),
     },
     FOOD_COUNT: parseInt($('devFoodCount').value, 10),
     FOOD_CAPACITY: parseInt($('devFoodCapacity').value, 10),
@@ -150,6 +154,7 @@ if (DEBUG_MODE) {
   bindSlider('devSocialChance', 'devSocialChanceVal', 3);
   bindSlider('devSpeedSprint', 'devSpeedSprintVal', 2);
   bindSlider('devSpeedCarry', 'devSpeedCarryVal', 2);
+  bindSlider('devSpeedCarryRich', 'devSpeedCarryRichVal', 2);
   bindSlider('devFoodCount', 'devFoodCountVal', 0);
   bindSlider('devFoodCapacity', 'devFoodCapacityVal', 0);
   bindSlider('devBeamSpeed', 'devBeamSpeedVal', 0);
@@ -169,6 +174,8 @@ if (DEBUG_MODE) {
     $('devSpeedSprintVal').textContent = DEV_DEFAULTS.AI_SPEED.sprint.toFixed(2);
     $('devSpeedCarry').value = DEV_DEFAULTS.AI_SPEED.carry;
     $('devSpeedCarryVal').textContent = DEV_DEFAULTS.AI_SPEED.carry.toFixed(2);
+    $('devSpeedCarryRich').value = DEV_DEFAULTS.AI_SPEED.carryRich;
+    $('devSpeedCarryRichVal').textContent = DEV_DEFAULTS.AI_SPEED.carryRich.toFixed(2);
     $('devFoodCount').value = DEV_DEFAULTS.FOOD_COUNT;
     $('devFoodCountVal').textContent = DEV_DEFAULTS.FOOD_COUNT;
     $('devFoodCapacity').value = DEV_DEFAULTS.FOOD_CAPACITY;

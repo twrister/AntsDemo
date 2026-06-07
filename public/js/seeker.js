@@ -191,19 +191,21 @@ export class SeekerController {
     if (this.beamActive) {
       const target = this.screenToWorld(this.input.mouse.x, this.input.mouse.y);
       this._moveBeamToward(target, dt);
-      this._beamSendTimer -= dt;
-      if (this._beamSendTimer <= 0) {
-        this.net.send({ type: 'tool_beam', tool: 'panic', x: target.x, y: target.y, active: true });
-        this._beamSendTimer = 0.1;
-      }
       if (snap.lightBeam) this._beamConfirmed = true;
-      // 服务器时长耗尽后自动结束（需先收到确认，避免首帧误判）
+      // 先检测结束再同步，避免到期帧仍发送 active:true 导致服务器误重启
       if (this._beamConfirmed && !snap.lightBeam) {
+        this.net.send({ type: 'tool_beam', tool: 'panic', x: target.x, y: target.y, active: false });
         this.beamActive = false;
         this._localBeam = null;
         this._beamConfirmed = false;
         this.armedTool = null;
         this._refreshArmed();
+      } else {
+        this._beamSendTimer -= dt;
+        if (this._beamSendTimer <= 0) {
+          this.net.send({ type: 'tool_beam', tool: 'panic', x: target.x, y: target.y, active: true });
+          this._beamSendTimer = 0.1;
+        }
       }
     }
 

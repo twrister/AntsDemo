@@ -45,6 +45,7 @@ export class Game {
     this.effects = {};
     this.bait = null;
     this.lightBeam = null; // 强光照射：{ x, y, until }
+    this._lastLightBeamUntil = 0; // 上次光束自然结束时刻，用于忽略过期后的残留 active:true
 
     this.hiderCount = hiderPlayers.length;
     this.quota = CONFIG.foodQuota(this.hiderCount);
@@ -190,6 +191,8 @@ export class Game {
 
     if (active) {
       if (!this.lightBeam) {
+        // 光束刚结束后的残留 active:true 不应重启（调试模式无 CD 时尤甚）
+        if (this._lastLightBeamUntil > 0 && this.now < this._lastLightBeamUntil + 0.3) return;
         if (!this.debugMode) {
           if (this.now < this.globalCooldownUntil || this.now < this.lockUntil) return;
           this.globalCooldownUntil = this.now + def.cd;
@@ -208,6 +211,7 @@ export class Game {
   /** 强光光束限速移向客户端上报的目标点 */
   _updateLightBeam(dt) {
     if (!this.lightBeam || this.now >= this.lightBeam.until) {
+      if (this.lightBeam) this._lastLightBeamUntil = this.lightBeam.until;
       this.lightBeam = null;
       return;
     }

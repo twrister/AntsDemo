@@ -450,7 +450,13 @@ export class Game {
       debugMode: this.debugMode,
       frozen: this.frozenUntil > this.now,
       lightBeam: this.lightBeam && this.now < this.lightBeam.until
-        ? { x: Math.round(this.lightBeam.x), y: Math.round(this.lightBeam.y), radius: CONFIG.TOOLS.panic.radius }
+        ? {
+            x: this.lightBeam.x,
+            y: this.lightBeam.y,
+            targetX: this.lightBeam.targetX,
+            targetY: this.lightBeam.targetY,
+            radius: CONFIG.TOOLS.panic.radius,
+          }
         : null,
     };
   }

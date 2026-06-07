@@ -54,7 +54,19 @@ export class Net {
         angle: a0.angle + angleDiff(a0.angle, a1.angle) * f,
       };
     });
-    return { ...s1, ants };
+    let lightBeam = null;
+    if (s0.lightBeam && s1.lightBeam) {
+      lightBeam = {
+        x: s0.lightBeam.x + (s1.lightBeam.x - s0.lightBeam.x) * f,
+        y: s0.lightBeam.y + (s1.lightBeam.y - s0.lightBeam.y) * f,
+        targetX: (s0.lightBeam.targetX ?? s0.lightBeam.x) + ((s1.lightBeam.targetX ?? s1.lightBeam.x) - (s0.lightBeam.targetX ?? s0.lightBeam.x)) * f,
+        targetY: (s0.lightBeam.targetY ?? s0.lightBeam.y) + ((s1.lightBeam.targetY ?? s1.lightBeam.y) - (s0.lightBeam.targetY ?? s0.lightBeam.y)) * f,
+        radius: s1.lightBeam.radius,
+      };
+    } else if (s1.lightBeam) {
+      lightBeam = s1.lightBeam;
+    }
+    return { ...s1, ants, lightBeam };
   }
 }
 

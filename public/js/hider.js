@@ -10,7 +10,47 @@ export class HiderController {
     this._lastMove = { dx: 0, dy: 0 };
     this._lastSprint = false;
     this._sendTimer = 0;
+    this._displayBeam = null; // 客户端预测的光束位置，消除 10Hz 快照跳变
     document.getElementById('hiderHint').classList.remove('hidden');
+  }
+
+  /** 与服务器同速追向目标点，每帧平滑渲染强光 */
+  _smoothLightBeam(snap, dt) {
+    const server = snap.lightBeam;
+    if (!server) {
+      this._displayBeam = null;
+      return null;
+    }
+    const speed = this.world.tools.panic.beamSpeed ?? 280;
+    const target = {
+      x: server.targetX ?? server.x,
+      y: server.targetY ?? server.y,
+    };
+    if (!this._displayBeam) {
+      this._displayBeam = { x: server.x, y: server.y };
+    }
+    this._moveToward(this._displayBeam, target, speed * dt);
+    // 与权威位置偏差过大时软校正，避免长期漂移
+    const drift = Math.hypot(this._displayBeam.x - server.x, this._displayBeam.y - server.y);
+    if (drift > 40) {
+      this._displayBeam.x += (server.x - this._displayBeam.x) * 0.35;
+      this._displayBeam.y += (server.y - this._displayBeam.y) * 0.35;
+    }
+    return { x: this._displayBeam.x, y: this._displayBeam.y, radius: server.radius };
+  }
+
+  /** 限速移向目标点（像素/秒） */
+  _moveToward(pos, target, maxMove) {
+    const dx = target.x - pos.x;
+    const dy = target.y - pos.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist <= maxMove || dist === 0) {
+      pos.x = target.x;
+      pos.y = target.y;
+      return;
+    }
+    pos.x += (dx / dist) * maxMove;
+    pos.y += (dy / dist) * maxMove;
   }
 
   update(snap, dt) {
@@ -41,6 +81,6 @@ export class HiderController {
       this._lastSprint = sprint;
     }
 
-    return { cam: this.cam, frozen: snap.frozen, lightBeam: snap.lightBeam };
+    return { cam: this.cam, frozen: snap.frozen, lightBeam: this._smoothLightBeam(snap, dt) };
   }
 }

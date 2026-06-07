@@ -52,6 +52,10 @@ export class Renderer {
       if (this._shouldHideAntInNest(ant, snap.nest, opts)) continue;
       this._drawAnt(ctx, ant, opts);
     }
+    // 隐藏者可见搜寻者鼠标位置（大手）
+    if (opts.role === ROLE.HIDER && snap.seekerCursor) {
+      this._drawSeekerHand(ctx, snap.seekerCursor, opts.time);
+    }
 
     ctx.restore();
 
@@ -511,4 +515,51 @@ export class Renderer {
   }
 
   _tint(ctx, W, H, color) { ctx.fillStyle = color; ctx.fillRect(0, 0, W, H); }
+
+  /** 隐藏者视角：绘制搜寻者鼠标位置（俯视大手） */
+  _drawSeekerHand(ctx, cursor, time) {
+    const pulse = 0.94 + 0.06 * Math.sin(time / 140);
+    ctx.save();
+    ctx.translate(cursor.x, cursor.y);
+    ctx.scale(pulse, pulse);
+
+    // 投影
+    ctx.fillStyle = 'rgba(0,0,0,0.22)';
+    ctx.beginPath();
+    ctx.ellipse(3, 5, 24, 20, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 掌心
+    ctx.fillStyle = '#f2c49a';
+    ctx.strokeStyle = '#b8845c';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.ellipse(0, 4, 20, 24, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // 四指（指向地图上方）
+    const fingerW = 7;
+    const fingerH = 22;
+    const fingerY = -14;
+    for (let i = 0; i < 4; i++) {
+      const fx = -10.5 + i * 7;
+      ctx.beginPath();
+      ctx.ellipse(fx, fingerY - fingerH / 2, fingerW / 2, fingerH / 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // 拇指（侧向伸出）
+    ctx.save();
+    ctx.translate(-18, 2);
+    ctx.rotate(-0.55);
+    ctx.beginPath();
+    ctx.ellipse(0, -8, fingerW / 2, fingerH / 2 - 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.restore();
+  }
 }

@@ -62,7 +62,19 @@ export class Net {
     });
     const lightBeam = this._lerpBeam(s0.lightBeam, s1.lightBeam, f);
     const sniffBeam = this._lerpSniffBeam(s0.sniffBeam, s1.sniffBeam, f);
-    return { ...s1, ants, lightBeam, sniffBeam };
+    const seekerCursor = this._lerpPoint(s0.seekerCursor, s1.seekerCursor, f);
+    return { ...s1, ants, lightBeam, sniffBeam, seekerCursor };
+  }
+
+  /** 插值二维坐标点 */
+  _lerpPoint(p0, p1, f) {
+    if (p0 && p1) {
+      return {
+        x: p0.x + (p1.x - p0.x) * f,
+        y: p0.y + (p1.y - p0.y) * f,
+      };
+    }
+    return p1 || p0 || null;
   }
 
   /** 插值光束位置（强光照射 / 嗅探圈） */

@@ -23,6 +23,7 @@ export class SeekerController {
     this._localBeam = null;
     this._beamSendTimer = 0;
     this._beamConfirmed = false; // 服务器已确认光束，避免首帧误判结束
+    this._cursorSendTimer = 0;   // 鼠标位置同步限频
 
     this._setupDrag();
     this._buildToolbar();
@@ -283,6 +284,14 @@ export class SeekerController {
     const sniffBeam = this.beamActive && this.beamTool === 'sniff'
       ? { ...localBeam, hiderDetected: !!snap.sniffBeam?.hiderDetected }
       : snap.sniffBeam;
+
+    // 限频同步鼠标世界坐标，供隐藏者方显示大手
+    this._cursorSendTimer -= dt;
+    if (this._cursorSendTimer <= 0) {
+      const wp = this.screenToWorld(this.input.mouse.x, this.input.mouse.y);
+      this.net.send({ type: 'cursor', x: wp.x, y: wp.y });
+      this._cursorSendTimer = 0.1;
+    }
 
     const viewRadius = Math.min(this.canvas.width, this.canvas.height) * this.world.viewRatio;
     return {

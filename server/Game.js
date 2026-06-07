@@ -53,6 +53,7 @@ export class Game {
     this._lastLightBeamUntil = 0; // 上次光束自然结束时刻，用于忽略过期后的残留 active:true
     this.sniffBeam = null; // 气息嗅探：{ x, y, until, hiderDetected }
     this._lastSniffBeamUntil = 0;
+    this.seekerCursor = null; // 搜寻者鼠标世界坐标，仅下发给隐藏者
 
     this.hiderCount = hiderPlayers.length;
     this.hiderQuota = CONFIG.hiderFoodQuota(this.hiderCount);
@@ -210,6 +211,14 @@ export class Game {
     const ant = this.ants.find(a => a.playerId === pid);
     if (!ant || this._isMarked(ant)) return;
     ant.sprinting = active;
+  }
+
+  /** 记录搜寻者鼠标世界坐标，供隐藏者方显示 */
+  setSeekerCursor(x, y) {
+    this.seekerCursor = {
+      x: Math.max(0, Math.min(CONFIG.WORLD_W, x)),
+      y: Math.max(0, Math.min(CONFIG.WORLD_H, y)),
+    };
   }
 
   markAnt(antId) {
@@ -661,6 +670,12 @@ export class Game {
             targetY: this.sniffBeam.targetY,
             radius: this._sniffRadius(),
             hiderDetected: !!this.sniffBeam.hiderDetected,
+          }
+        : null,
+      seekerCursor: role === ROLE.HIDER && this.seekerCursor
+        ? {
+            x: Math.round(this.seekerCursor.x),
+            y: Math.round(this.seekerCursor.y),
           }
         : null,
     };

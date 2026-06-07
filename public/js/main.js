@@ -46,6 +46,7 @@ const DEV_DEFAULTS = {
   AI_SPEED: { sprint: 1.5, carry: 0.8 },
   FOOD_COUNT: 5,
   FOOD_CAPACITY: 60,
+  BEAM_SPEED: 280,
 };
 
 const DEV_STORAGE_KEY = 'antsDemo_devCfg';
@@ -63,8 +64,14 @@ function persistDevConfig() {
     },
     FOOD_COUNT: parseInt($('devFoodCount').value, 10),
     FOOD_CAPACITY: parseInt($('devFoodCapacity').value, 10),
+    BEAM_SPEED: parseInt($('devBeamSpeed').value, 10),
   };
   localStorage.setItem(DEV_STORAGE_KEY, JSON.stringify(cfg));
+}
+
+/** 将已保存的强光跟随速度写入 world.tools，供客户端光束预测使用 */
+function applyBeamSpeedToWorld(beamSpeed) {
+  if (world?.tools?.panic) world.tools.panic.beamSpeed = beamSpeed;
 }
 
 /** 从 localStorage 恢复滑块值（缺字段时回落到 DEV_DEFAULTS） */
@@ -92,6 +99,9 @@ function restoreDevConfig() {
   $('devFoodCountVal').textContent = c.FOOD_COUNT;
   $('devFoodCapacity').value = c.FOOD_CAPACITY;
   $('devFoodCapacityVal').textContent = c.FOOD_CAPACITY;
+  $('devBeamSpeed').value = c.BEAM_SPEED;
+  $('devBeamSpeedVal').textContent = c.BEAM_SPEED;
+  applyBeamSpeedToWorld(c.BEAM_SPEED);
 }
 
 // 页面加载时立即恢复
@@ -112,7 +122,9 @@ function sendDevConfig() {
     },
     FOOD_COUNT: parseInt($('devFoodCount').value, 10),
     FOOD_CAPACITY: parseInt($('devFoodCapacity').value, 10),
+    BEAM_SPEED: parseInt($('devBeamSpeed').value, 10),
   });
+  applyBeamSpeedToWorld(parseInt($('devBeamSpeed').value, 10));
 }
 
 /** 绑定单个滑块：实时更新显示值并以 16ms（约 1 帧）节流发送，保证修改下一帧即生效 */
@@ -136,6 +148,7 @@ bindSlider('devSpeedSprint', 'devSpeedSprintVal', 2);
 bindSlider('devSpeedCarry', 'devSpeedCarryVal', 2);
 bindSlider('devFoodCount', 'devFoodCountVal', 0);
 bindSlider('devFoodCapacity', 'devFoodCapacityVal', 0);
+bindSlider('devBeamSpeed', 'devBeamSpeedVal', 0);
 
 /** 恢复所有滑块到默认值，清除本地存储并同步服务器 */
 $('devReset').addEventListener('click', () => {
@@ -156,6 +169,8 @@ $('devReset').addEventListener('click', () => {
   $('devFoodCountVal').textContent = DEV_DEFAULTS.FOOD_COUNT;
   $('devFoodCapacity').value = DEV_DEFAULTS.FOOD_CAPACITY;
   $('devFoodCapacityVal').textContent = DEV_DEFAULTS.FOOD_CAPACITY;
+  $('devBeamSpeed').value = DEV_DEFAULTS.BEAM_SPEED;
+  $('devBeamSpeedVal').textContent = DEV_DEFAULTS.BEAM_SPEED;
   sendDevConfig();
 });
 
@@ -250,6 +265,7 @@ net.on('lobby', (m) => {
 net.on('start', (m) => {
   role = m.role;
   world = m.world;
+  restoreDevConfig(); // 将本地保存的强光跟随速度等参数写入 world
   showScreen('game');
   $('roleTag').textContent = role === ROLE.SEEKER ? '搜寻者' : '隐藏者';
   $('roleTag').className = 'hud-item ' + (role === ROLE.SEEKER ? 'role-seeker' : 'role-hider');

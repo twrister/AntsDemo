@@ -90,6 +90,11 @@ export class Game {
     return this.devCfg.FOOD_CAPACITY ?? CONFIG.FOOD.capacity;
   }
 
+  /** 强光光束跟随速度（像素/秒，开发者工具可热改） */
+  _beamSpeed() {
+    return this.devCfg.BEAM_SPEED ?? CONFIG.TOOLS.panic.beamSpeed ?? 280;
+  }
+
   /** 在地图上随机生成 n 个食物堆，保证距巢至少 200px */
   _spawnFoodSources(n) {
     const capacity = this._foodCapacity();
@@ -215,7 +220,7 @@ export class Game {
       this.lightBeam = null;
       return;
     }
-    const speed = CONFIG.TOOLS.panic.beamSpeed ?? 280;
+    const speed = this._beamSpeed();
     moveToward(
       this.lightBeam,
       { x: this.lightBeam.targetX, y: this.lightBeam.targetY },
@@ -482,7 +487,7 @@ export class Game {
   /**
    * 更新开发者调试参数（运行时热修改 AI 行为，不重启对局）。
    * 所有参数下一帧即生效（speed/turn 逐帧读取；ant count 立即增删蚂蚁）。
-   * 支持字段：AI_SPEED_BASE / AI_TURN_SMOOTH / AI_SOCIAL_CHANCE / AI_SPEED / AI_ANT_COUNT / FOOD_COUNT / FOOD_CAPACITY
+   * 支持字段：AI_SPEED_BASE / AI_TURN_SMOOTH / AI_SOCIAL_CHANCE / AI_SPEED / AI_ANT_COUNT / FOOD_COUNT / FOOD_CAPACITY / BEAM_SPEED
    */
   setDevConfig(params) {
     if (params.AI_SPEED_BASE !== undefined) this.devCfg.AI_SPEED_BASE = +params.AI_SPEED_BASE;
@@ -499,6 +504,9 @@ export class Game {
     }
     if (params.FOOD_CAPACITY !== undefined) {
       this._setFoodCapacity(+params.FOOD_CAPACITY);
+    }
+    if (params.BEAM_SPEED !== undefined) {
+      this.devCfg.BEAM_SPEED = Math.max(50, Math.min(800, +params.BEAM_SPEED));
     }
   }
 

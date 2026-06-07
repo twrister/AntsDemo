@@ -413,6 +413,7 @@ export class Game {
     const py = Math.max(margin, Math.min(CONFIG.WORLD_H - margin, y));
 
     const capacity = this._foodCapacity();
+    const lifetime = def.lifetime ?? 40;
     this.fakeFoods.push({
       id: this._nextFakeFoodId++,
       x: px,
@@ -420,6 +421,7 @@ export class Game {
       amount: capacity,
       capacity,
       warnUntil: 0,
+      expiresAt: this.now + lifetime,
     });
 
     this._toolsUsed = true;
@@ -632,6 +634,9 @@ export class Game {
     this._updateBeam('sniffBeam', '_lastSniffBeamUntil', dt);
     this._applyLightPanic();
     this._applySniffDetect();
+
+    // 假食物到期移除
+    this.fakeFoods = this.fakeFoods.filter(f => this.now < f.expiresAt);
 
     // 食物堆重生检查
     for (const s of this.foodSources) {
@@ -847,6 +852,7 @@ export class Game {
         amount: f.amount,
         capacity: f.capacity,
         warnLeft: +Math.max(0, f.warnUntil - this.now).toFixed(2),
+        lifeLeft: +Math.max(0, f.expiresAt - this.now).toFixed(2),
       })),
       foodActionTime: CONFIG.FOOD_ACTION_TIME,
       hidingSpots: this.hidingSpots.map((s) => ({

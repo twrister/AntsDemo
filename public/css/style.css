@@ -184,6 +184,8 @@ html, body {
 #canvas.dragging { cursor: grabbing; }
 #canvas.mark-cooldown { cursor: not-allowed; }
 #canvas.mark-cooldown.dragging { cursor: grabbing; }
+#canvas.tool-aiming { cursor: crosshair; }
+#canvas.tool-aiming.dragging { cursor: grabbing; }
 
 .hud {
   position: absolute; top: 16px; left: 50%; transform: translateX(-50%);

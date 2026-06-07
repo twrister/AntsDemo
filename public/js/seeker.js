@@ -3,6 +3,8 @@ import { computeFitZoom } from './const.js';
 
 /** 点击地图即放置的工具（非光束类） */
 const PLACE_TOOLS = new Set(['fakeFood']);
+/** 持续照射类工具：选中后需显示生效范围预览 */
+const BEAM_TOOLS = new Set(['panic', 'sniff']);
 
 export class SeekerController {
   constructor({ canvas, input, net, world }) {
@@ -221,6 +223,8 @@ export class SeekerController {
 
   _refreshArmed() {
     for (const key of this.toolKeys) this.toolEls[key].classList.toggle('active', key === this.armedTool);
+    const aiming = !!this.armedTool && BEAM_TOOLS.has(this.armedTool) && !this.beamActive;
+    this.canvas.classList.toggle('tool-aiming', aiming);
   }
 
   // 每帧更新：工具冷却 UI，并返回渲染参数
@@ -305,11 +309,26 @@ export class SeekerController {
     }
 
     const viewRadius = Math.min(this.canvas.width, this.canvas.height) * this.world.viewRatio;
+
+    // 光束工具选中待施放：在鼠标处显示生效范围预览
+    let toolPreview = null;
+    if (this.armedTool && BEAM_TOOLS.has(this.armedTool) && !this.beamActive) {
+      const wp = this.screenToWorld(this.input.mouse.x, this.input.mouse.y);
+      const def = this.world.tools[this.armedTool];
+      toolPreview = {
+        tool: this.armedTool,
+        x: wp.x,
+        y: wp.y,
+        radius: def?.radius ?? (this.armedTool === 'sniff' ? 100 : 120),
+      };
+    }
+
     return {
       cam: this.cam,
       viewRadius,
       lightBeam,
       sniffBeam,
+      toolPreview,
     };
   }
 }

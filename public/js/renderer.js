@@ -20,7 +20,7 @@ export class Renderer {
    * 渲染一帧。
    * @param snap 插值后的世界快照
    * @param cam  镜头 { x, y, zoom } —— 世界坐标中心点
-   * @param opts { role, world, time, viewRadius, lightBeam, sniffBeam }
+   * @param opts { role, world, time, viewRadius, lightBeam, sniffBeam, toolPreview }
    */
   draw(snap, cam, opts) {
     const ctx = this.ctx;
@@ -46,6 +46,7 @@ export class Renderer {
     this._drawHidingSpots(ctx, snap.hidingSpots ?? opts.world?.hidingSpots, opts);
     this._drawNormalFood(ctx, snap.normalFood);
     this._drawFakeFood(ctx, snap.fakeFood, opts);
+    if (opts.toolPreview) this._drawToolRangePreview(ctx, opts.toolPreview, opts.time);
     if (opts.lightBeam) this._drawLightBeam(ctx, opts.lightBeam, opts.time);
     if (opts.sniffBeam) this._drawSniffBeam(ctx, opts.sniffBeam, opts.time);
 
@@ -277,85 +278,94 @@ export class Renderer {
   }
 
   /**
-   * 绘制假食物：隐藏者视角与真食物相同；搜寻者可见虚线描边以示区别。
-   * warnLeft > 0 时叠加短暂红色高亮警告环。
+   * 绘制假食物：本体与真食物相同；仅搜寻者叠加剩余时长圆环。
    */
   _drawFakeFood(ctx, food, opts) {
     if (!food?.length) return;
-    const isSeeker = opts.role === ROLE.SEEKER;
-    const time = opts.time ?? 0;
+    const isSeeker = opts.role === ROLE.SEEKER && !opts.spectator;
+    const lifetime = opts.world?.tools?.fakeFood?.lifetime ?? 40;
     for (const f of food) {
+      this._drawFoodPile(ctx, f);
+      if (!isSeeker) continue;
       const ratio = (f.capacity > 0) ? f.amount / f.capacity : 0;
       const r = 4 + ratio * 8;
-      const alpha = 0.4 + ratio * 0.6;
-      const fill = `rgba(143,179,107,${alpha.toFixed(2)})`;
-      const stroke = isSeeker
-        ? `rgba(180,140,220,${(alpha * 0.85).toFixed(2)})`
-        : `rgba(200,230,160,${(alpha * 0.6).toFixed(2)})`;
+      const lifeLeft = f.lifeLeft ?? lifetime;
+      const lifeRatio = lifetime > 0 ? Math.max(0, Math.min(1, lifeLeft / lifetime)) : 0;
+      if (lifeRatio <= 0) continue;
+      const ringR = r + 12;
       ctx.beginPath();
-      ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = fill;
-      ctx.fill();
-      ctx.setLineDash(isSeeker ? [4, 3] : []);
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = isSeeker ? 2 : 1.5;
+      ctx.arc(f.x, f.y, ringR, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * lifeRatio);
+      ctx.strokeStyle = '#8fb36b';
+      ctx.lineWidth = 2.5;
       ctx.stroke();
-      ctx.setLineDash([]);
-      if (isSeeker) {
-        ctx.font = 'bold 10px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = 'rgba(200,170,255,0.9)';
-        ctx.fillText('假', f.x, f.y - r - 6);
-      }
-      if (f.warnLeft > 0) {
-        const pulse = 0.65 + 0.35 * Math.sin(time / 50);
-        const warnR = r + 10 + (1 - f.warnLeft / 1.5) * 6;
-        ctx.beginPath();
-        ctx.arc(f.x, f.y, warnR, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(255,70,40,${(0.85 * pulse).toFixed(3)})`;
-        ctx.lineWidth = 3;
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(f.x, f.y, warnR + 4, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(255,200,60,${(0.45 * pulse).toFixed(3)})`;
-        ctx.lineWidth = 2;
-        ctx.stroke();
-      }
     }
   }
 
-  /** 绘制可枯竭食物堆：按剩余量/容量比例决定圆点大小与颜色深浅 */
+  /** 绘制单个食物堆：按剩余量/容量比例决定圆点大小与颜色深浅 */
+  _drawFoodPile(ctx, f, type = f.type || 'normal') {
+    if (f.amount <= 0) return;
+    const isRich = type === 'rich';
+    const ratio = (f.capacity > 0) ? f.amount / f.capacity : 0;
+    const r = isRich ? 6 + ratio * 10 : 4 + ratio * 8;
+    const alpha = 0.4 + ratio * 0.6;
+    const fill = isRich ? `rgba(224,169,59,${alpha.toFixed(2)})` : `rgba(143,179,107,${alpha.toFixed(2)})`;
+    const stroke = isRich ? `rgba(255,220,120,${(alpha * 0.7).toFixed(2)})` : `rgba(200,230,160,${(alpha * 0.6).toFixed(2)})`;
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = fill;
+    ctx.fill();
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = isRich ? 2 : 1.5;
+    ctx.stroke();
+    if (isRich) {
+      const label = `×${f.score || 3}`;
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(20,16,10,0.85)';
+      ctx.strokeText(label, f.x, f.y);
+      ctx.fillStyle = '#fff4d0';
+      ctx.fillText(label, f.x, f.y);
+    }
+  }
+
+  /** 绘制可枯竭食物堆 */
   _drawNormalFood(ctx, food) {
     if (!food) return;
-    for (const f of food) {
-      if (f.amount <= 0) continue;
-      const isRich = f.type === 'rich';
-      const ratio = (f.capacity > 0) ? f.amount / f.capacity : 0;
-      const r = isRich ? 6 + ratio * 10 : 4 + ratio * 8;
-      const alpha = 0.4 + ratio * 0.6;
-      const fill = isRich ? `rgba(224,169,59,${alpha.toFixed(2)})` : `rgba(143,179,107,${alpha.toFixed(2)})`;
-      const stroke = isRich ? `rgba(255,220,120,${(alpha * 0.7).toFixed(2)})` : `rgba(200,230,160,${(alpha * 0.6).toFixed(2)})`;
-      ctx.beginPath();
-      ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = fill;
-      ctx.fill();
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = isRich ? 2 : 1.5;
-      ctx.stroke();
-      // 珍稀食物标注单次得分（如 ×3）
-      if (isRich) {
-        const label = `×${f.score || 3}`;
-        ctx.font = 'bold 12px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.lineWidth = 3;
-        ctx.strokeStyle = 'rgba(20,16,10,0.85)';
-        ctx.strokeText(label, f.x, f.y);
-        ctx.fillStyle = '#fff4d0';
-        ctx.fillText(label, f.x, f.y);
-      }
-    }
+    for (const f of food) this._drawFoodPile(ctx, f);
+  }
+
+  /** 绘制光束工具瞄准预览：选中待施放时跟随鼠标显示生效范围 */
+  _drawToolRangePreview(ctx, preview, time) {
+    const { tool, x, y } = preview;
+    const r = preview.radius || (tool === 'sniff' ? 100 : 120);
+    const pulse = 0.75 + 0.25 * Math.sin(time / 100);
+    const isSniff = tool === 'sniff';
+
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = isSniff
+      ? `rgba(80,200,220,${(0.07 * pulse).toFixed(3)})`
+      : `rgba(255,220,100,${(0.09 * pulse).toFixed(3)})`;
+    ctx.fill();
+
+    ctx.setLineDash([10, 7]);
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.strokeStyle = isSniff
+      ? `rgba(100,210,230,${(0.55 * pulse).toFixed(3)})`
+      : `rgba(255,230,150,${(0.6 * pulse).toFixed(3)})`;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fillStyle = isSniff
+      ? `rgba(120,220,240,${(0.75 * pulse).toFixed(3)})`
+      : `rgba(255,240,180,${(0.8 * pulse).toFixed(3)})`;
+    ctx.fill();
   }
 
   /** 绘制气息嗅探圈：发现目标时变为红色警告色 */

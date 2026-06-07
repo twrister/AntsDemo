@@ -27,6 +27,7 @@ export const CONFIG = {
   },
   MARK_COOLDOWN: { min: 3, max: 5 }, // 误标记后标记功能冷却 (秒)
   MISMARK_FLEE_DURATION: 1.2,          // 误标 AI 逃窜时长 (秒)
+  HIDER_MARK_DURATION: 10,             // 隐藏者被标中后冻结时长 (秒)，结束后在巢穴复活
 
   // 搜寻者视野
   SEEKER_VIEW_RATIO: 0.6,   // 屏幕 60%
@@ -59,12 +60,22 @@ export const CONFIG = {
     coarseFactor: 2,        // 快照降采样倍数（降带宽），输出 40×30
   },
 
+  // ---------- 巢穴 ----------
+  NEST: {
+    xRatio: 0.5,            // 巢心 X = WORLD_W * xRatio（地图水平居中）
+    yRatio: 0.12,           // 巢心 Y = WORLD_H * yRatio（地图中上方）
+    radius: 80,             // 巢穴区域半径：遮蔽搜寻者视野
+    depositRadius: 30,      // 巢内食物堆放点交互半径
+    depositOffsetX: 0,      // 堆放点相对巢心的偏移
+    depositOffsetY: 18,
+    foodMinDist: 200,       // 地图食物堆距巢心最小距离
+  },
+
   // ---------- 可枯竭食物堆 ----------
   FOOD: {
     count: 5,               // 地图同时存在的食物堆数量
     capacity: 60,           // 每堆初始容量（可搬运次数）
     respawnDelay: 30,       // 食物堆枯竭后延时重生（秒）
     pickupRadius: 18,       // 蚂蚁进入此范围触发拾取
-    nestRadius: 30,         // 到达巢穴的判定半径
   },
 };

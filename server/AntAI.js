@@ -139,8 +139,9 @@ function _updateSearching(ant, dt, world, cfg) {
 // ---------- 搬运态 ----------
 function _updateCarrying(ant, dt, world, cfg) {
   const phero = world.phero;
-  const nest = world.nest;
-  const desired = Math.atan2(nest.y - ant.y, nest.x - ant.x);
+  // 回巢目标为巢内食物堆放点（非巢心）
+  const dep = world.nest.deposit || world.nest;
+  const desired = Math.atan2(dep.y - ant.y, dep.x - ant.x);
   const carryMul = cfg.AI_SPEED?.carry ?? CONFIG.AI_SPEED.carry;
   _moveToward(ant, desired, carryMul, dt, false, cfg);
 

@@ -449,7 +449,12 @@ function updateDevAntStats(snap) {
 
 function handleEvent(e) {
   switch (e.t) {
-    case 'mark_hit':   toast('标记命中！隐藏者被淘汰', 'good'); break;
+    case 'mark_hit':
+      toast(role === ROLE.SEEKER ? '标记命中！隐藏者冻结 10 秒' : '你被标记了！10 秒内无法移动', 'bad');
+      break;
+    case 'hider_respawn':
+      if (role === ROLE.HIDER) toast('已在巢穴复活，继续搬运食物', 'good');
+      break;
     case 'mark_miss':
       toast('误标记！AI 逃窜中，标记冷却', 'bad');
       controller?.onMarkMiss?.();

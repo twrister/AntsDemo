@@ -39,14 +39,17 @@ export class Renderer {
 
     this._drawGround(ctx, opts.world);
     // 信息素轨迹绘制在地面之上、蚂蚁之下，呈现搬运通道
-    if (this._cachedPhero && opts.showPheromone !== false) this._drawPheromone(ctx, this._cachedPhero);
-    this._drawNest(ctx, snap.nest);
+    if (this._cachedPhero && opts.showPheromone !== false) {
+      this._drawPheromone(ctx, this._cachedPhero, snap.nest, opts);
+    }
+    this._drawNest(ctx, snap.nest, opts);
     this._drawNormalFood(ctx, snap.normalFood);
     if (snap.bait) this._drawBait(ctx, snap.bait, opts.time);
     if (opts.lightBeam) this._drawLightBeam(ctx, opts.lightBeam, opts.time);
     if (opts.sniffBeam) this._drawSniffBeam(ctx, opts.sniffBeam, opts.time);
 
     for (const ant of snap.ants) {
+      if (this._shouldHideAntInNest(ant, snap.nest, opts)) continue;
       this._drawAnt(ctx, ant, opts);
     }
 
@@ -65,6 +68,7 @@ export class Renderer {
       ctx.scale(zoom, zoom);
       ctx.translate(-cam.x, -cam.y);
       for (const ant of snap.ants) {
+        if (this._shouldHideAntInNest(ant, snap.nest, opts)) continue;
         const illum = this._beamIllumination(ant, opts.lightBeam);
         if (illum > 0.06) this._drawAnt(ctx, ant, opts, illum);
       }
@@ -96,14 +100,63 @@ export class Renderer {
     ctx.strokeRect(0, 0, world.w, world.h);
   }
 
-  _drawNest(ctx, nest) {
+  /** 搜寻者不可见巢穴内的蚂蚁（遮蔽视野） */
+  _shouldHideAntInNest(ant, nest, opts) {
+    if (opts.role !== ROLE.SEEKER || !nest?.radius) return false;
+    const dx = ant.x - nest.x, dy = ant.y - nest.y;
+    return dx * dx + dy * dy < nest.radius * nest.radius;
+  }
+
+  /** 点是否在巢穴区域内（用于遮蔽内部细节） */
+  _isPointInNest(x, y, nest) {
+    if (!nest?.radius) return false;
+    const dx = x - nest.x, dy = y - nest.y;
+    return dx * dx + dy * dy < nest.radius * nest.radius;
+  }
+
+  _drawNest(ctx, nest, opts) {
     if (!nest) return;
+    const r = nest.radius || 40;
+    const isSeeker = opts?.role === ROLE.SEEKER;
     ctx.beginPath();
-    ctx.arc(nest.x, nest.y, 40, 0, Math.PI * 2);
-    ctx.fillStyle = '#5a3d1f'; ctx.fill();
-    ctx.strokeStyle = '#e0a93b'; ctx.lineWidth = 3; ctx.stroke();
-    ctx.fillStyle = '#e0a93b'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('巢穴', nest.x, nest.y + 5);
+    ctx.arc(nest.x, nest.y, r, 0, Math.PI * 2);
+    if (isSeeker) {
+      // 搜寻者只见不透光外壳，巢内结构（堆放点等）不可见
+      ctx.fillStyle = '#241709';
+      ctx.fill();
+      ctx.strokeStyle = '#c89830';
+      ctx.lineWidth = 3;
+      ctx.stroke();
+      ctx.fillStyle = '#e0a93b';
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('巢穴', nest.x, nest.y - r * 0.55);
+      return;
+    }
+    ctx.fillStyle = 'rgba(45,28,12,0.92)';
+    ctx.fill();
+    ctx.strokeStyle = '#e0a93b';
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    // 巢内食物堆放点（仅隐藏者可见）
+    const dep = nest.deposit;
+    if (dep) {
+      ctx.beginPath();
+      ctx.arc(dep.x, dep.y, dep.radius || 12, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(90,61,31,0.85)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(143,179,107,0.7)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(dep.x, dep.y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = '#8fb36b';
+      ctx.fill();
+    }
+    ctx.fillStyle = '#e0a93b';
+    ctx.font = '14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('巢穴', nest.x, nest.y - r * 0.35);
   }
 
   /**
@@ -112,8 +165,9 @@ export class Renderer {
    * toHome（品红）：引导搬运者回巢的轨迹。
    * 两层叠加后呈现出蚁群真实走廊的双向颜色。
    */
-  _drawPheromone(ctx, phero) {
+  _drawPheromone(ctx, phero, nest, opts) {
     const { cols, rows, cell, toFood, toHome } = phero;
+    const maskNest = opts?.role === ROLE.SEEKER;
     for (let r = 0; r < rows; r++) {
       for (let c = 0; c < cols; c++) {
         const i = r * cols + c;
@@ -121,6 +175,8 @@ export class Renderer {
         const h = toHome[i];   // 0-255
         if (f < 4 && h < 4) continue; // 跳过空格（性能优化）
         const x = c * cell, y = r * cell;
+        // 搜寻者不可见巢内信息素轨迹
+        if (maskNest && this._isPointInNest(x + cell * 0.5, y + cell * 0.5, nest)) continue;
         // toFood 青色：rgba(80, 220, 200, alpha)
         if (f >= 4) {
           ctx.fillStyle = `rgba(80,220,200,${(f / 255 * 0.45).toFixed(3)})`;

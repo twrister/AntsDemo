@@ -31,7 +31,10 @@ export class Game {
     this.ants = [];
     this._nextAntId = 0;  // 全局自增 ID，避免 _adjustAntCount 增量时 ID 重复
     this.foodSources = [];
-    this.nest = { x: CONFIG.WORLD_W * 0.5, y: 80 };
+    this.nest = {
+      x: CONFIG.WORLD_W * CONFIG.NEST.xRatio,
+      y: CONFIG.WORLD_H * CONFIG.NEST.yRatio,
+    };
     this.events = [];
 
     // 信息素场
@@ -83,8 +86,6 @@ export class Game {
       ant.devDim = devDim;
       ant.bot = !!h.bot;
       if (ant.bot) initAI(ant);
-      ant.x = rand(100, CONFIG.WORLD_W - 100);
-      ant.y = rand(200, CONFIG.WORLD_H - 100);
       this.ants.push(ant);
     }
   }
@@ -104,10 +105,47 @@ export class Game {
     return this.devCfg.SNIFF_RADIUS ?? CONFIG.TOOLS.sniff.radius ?? 100;
   }
 
-  /** 在地图上随机生成 n 个食物堆，保证距巢至少 200px */
+  /** 巢穴区域半径（像素，遮蔽搜寻者视野） */
+  _nestRadius() {
+    return this.devCfg.NEST_RADIUS ?? CONFIG.NEST.radius;
+  }
+
+  /** 巢内食物堆放点坐标 */
+  _depositPoint() {
+    return {
+      x: this.nest.x + CONFIG.NEST.depositOffsetX,
+      y: this.nest.y + CONFIG.NEST.depositOffsetY,
+    };
+  }
+
+  /** 食物堆放点交互半径 */
+  _depositRadius() {
+    return CONFIG.NEST.depositRadius;
+  }
+
+  /** 点是否在巢穴遮蔽区域内 */
+  _isInsideNest(pos) {
+    const r = this._nestRadius();
+    return dist2(pos, this.nest) < r * r;
+  }
+
+  /** 在巢穴区域内随机取一点（用于出生/复活） */
+  _randomPosInNest() {
+    const spawnR = this._nestRadius() * 0.55;
+    const ang = rand(0, Math.PI * 2);
+    const dist = rand(0, spawnR);
+    return {
+      x: this.nest.x + Math.cos(ang) * dist,
+      y: this.nest.y + Math.sin(ang) * dist,
+    };
+  }
+
+  /** 在地图上随机生成 n 个食物堆，保证距巢足够远 */
   _spawnFoodSources(n) {
     const capacity = this._foodCapacity();
     const nestX = this.nest.x, nestY = this.nest.y;
+    const minDist = CONFIG.NEST.foodMinDist;
+    const minDist2 = minDist * minDist;
     const target = this.foodSources.length + n;
     let nextId = this.foodSources.length;
     let attempts = 0;
@@ -115,20 +153,22 @@ export class Game {
       attempts++;
       const x = rand(80, CONFIG.WORLD_W - 80);
       const y = rand(200, CONFIG.WORLD_H - 80);
-      if ((x - nestX) ** 2 + (y - nestY) ** 2 < 200 * 200) continue;
+      if ((x - nestX) ** 2 + (y - nestY) ** 2 < minDist2) continue;
       this.foodSources.push({ id: nextId++, x, y, amount: capacity, capacity, respawnAt: 0 });
     }
   }
 
   _makeAnt(id, isHider, playerId) {
+    const spawn = this._randomPosInNest();
     const ant = {
       id, isHider, playerId,
-      x: rand(40, CONFIG.WORLD_W - 40),
-      y: rand(160, CONFIG.WORLD_H - 40),
+      x: spawn.x,
+      y: spawn.y,
       angle: rand(-Math.PI, Math.PI),
       traits: randomTraits(),
       carrying: false,
-      marked: false,
+      markedUntil: 0,   // 被标中冻结截止时刻；0 表示正常
+      eliminated: false, // 玩家离场等永久出局
       suspicious: 0,
       vx: 0, vy: 0,
       sprinting: false,
@@ -140,10 +180,20 @@ export class Game {
     return ant;
   }
 
+  /** 隐藏者是否处于被标中冻结期（不可移动） */
+  _isMarked(ant) {
+    return ant.markedUntil > this.now;
+  }
+
+  /** 隐藏者是否仍在对局中（未永久出局） */
+  _isActiveHider(ant) {
+    return ant.isHider && !ant.eliminated;
+  }
+
   // ---------- 玩家输入 ----------
   setHiderMove(pid, dx, dy) {
     const ant = this.ants.find(a => a.playerId === pid);
-    if (!ant || ant.marked) return;
+    if (!ant || this._isMarked(ant)) return;
     const len = Math.hypot(dx, dy) || 1;
     ant.vx = dx / len; ant.vy = dy / len;
     if (dx || dy) ant.angle = Math.atan2(dy, dx);
@@ -152,24 +202,24 @@ export class Game {
   /** 隐藏者冲刺开关：按住空格时叠加加速倍率 */
   setHiderSprint(pid, active) {
     const ant = this.ants.find(a => a.playerId === pid);
-    if (!ant || ant.marked) return;
+    if (!ant || this._isMarked(ant)) return;
     ant.sprinting = active;
   }
 
   markAnt(antId) {
     if (this.over || this.now < this.markCooldownUntil) return;
     const ant = this.ants.find(a => a.id === antId);
-    if (!ant || ant.marked) return;
+    if (!ant || this._isMarked(ant)) return;
     if (ant.isHider) {
-      ant.marked = true;
+      ant.markedUntil = this.now + CONFIG.HIDER_MARK_DURATION;
       ant.vx = ant.vy = 0;
+      ant.sprinting = false;
       if (ant.carrying) {
         ant.carrying = false;
         ant.pickupProgress = 0;
         ant.depositProgress = 0;
       }
       this.events.push({ t: 'mark_hit', x: ant.x, y: ant.y });
-      this._checkWin();
     } else {
       // 误标 AI：触发逃窜态短暂打乱画面，并进入标记冷却
       triggerFlee(ant, CONFIG.MISMARK_FLEE_DURATION, { x: ant.x, y: ant.y });
@@ -277,7 +327,8 @@ export class Game {
     const r2 = this._sniffRadius() ** 2;
     const src = { x: beam.x, y: beam.y };
     for (const a of this.ants) {
-      if (a.isHider && !a.marked && dist2(a, src) < r2) {
+      if (this._isInsideNest(a)) continue;
+      if (a.isHider && !this._isMarked(a) && dist2(a, src) < r2) {
         beam.hiderDetected = true;
         beam.warnUntil = this.now + 0.4;
         // 本次嗅探仅触发一次，直至光束结束
@@ -305,7 +356,8 @@ export class Game {
   _processFoodAction(ant, dt) {
     const actionTime = CONFIG.FOOD_ACTION_TIME;
     const pickupR2 = CONFIG.FOOD.pickupRadius * CONFIG.FOOD.pickupRadius;
-    const nestR2 = CONFIG.FOOD.nestRadius * CONFIG.FOOD.nestRadius;
+    const deposit = this._depositPoint();
+    const depositR2 = this._depositRadius() ** 2;
 
     if (!ant.carrying) {
       const src = this._nearestFoodSource(ant);
@@ -335,7 +387,7 @@ export class Game {
       return false;
     }
 
-    if (dist2(ant, this.nest) >= nestR2) {
+    if (dist2(ant, deposit) >= depositR2) {
       ant.depositProgress = 0;
       return false;
     }
@@ -346,7 +398,7 @@ export class Game {
     ant.depositProgress = 0;
     ant.tripTime = 0;
     if (ant.state !== undefined) ant.state = 'searching';
-    this.phero.deposit(this.nest.x, this.nest.y, 1, CONFIG.PHEROMONE.FIELD_MAX * 0.5);
+    this.phero.deposit(deposit.x, deposit.y, 1, CONFIG.PHEROMONE.FIELD_MAX * 0.5);
     if (ant.isHider) {
       this.score++;
       this.events.push({ t: 'score', score: this.score });
@@ -395,18 +447,31 @@ export class Game {
       }
     }
 
+    const deposit = this._depositPoint();
     const world = {
       now: this.now,
-      nest: this.nest,
+      nest: {
+        x: this.nest.x,
+        y: this.nest.y,
+        radius: this._nestRadius(),
+        deposit,
+      },
       foodSources: this.foodSources,
       phero: this.phero,
       frozenUntil: this.frozenUntil,
       cfg: this.devCfg,
     };
 
+    // 被标中冻结期满 → 巢穴复活
+    for (const ant of this.ants) {
+      if (ant.isHider && ant.markedUntil > 0 && this.now >= ant.markedUntil && !ant.eliminated) {
+        this._respawnHider(ant);
+      }
+    }
+
     // 更新蚂蚁
     for (const ant of this.ants) {
-      if (ant.marked) continue;
+      if (this._isMarked(ant)) continue;
       const foodBusy = this._processFoodAction(ant, dt);
       if (ant.isHider && !ant.bot) {
         if (!foodBusy) this._updateHider(ant, dt);
@@ -445,24 +510,44 @@ export class Game {
     depositTrail(ant, dt, this.phero);
   }
 
+  /** 隐藏者被标中冻结结束后，在巢穴复活并恢复行动 */
+  _respawnHider(ant) {
+    ant.markedUntil = 0;
+    const spawn = this._randomPosInNest();
+    ant.x = spawn.x;
+    ant.y = spawn.y;
+    ant.vx = ant.vy = 0;
+    ant.sprinting = false;
+    ant.carrying = false;
+    ant.pickupProgress = 0;
+    ant.depositProgress = 0;
+    ant.tripTime = rand(0, CONFIG.PHEROMONE.TAU);
+    if (ant.bot) initAI(ant);
+    this.events.push({ t: 'hider_respawn', x: ant.x, y: ant.y });
+  }
+
   _checkWin() {
-    const aliveHiders = this.ants.filter(a => a.isHider && !a.marked);
+    const aliveHiders = this.ants.filter(a => this._isActiveHider(a));
     if (aliveHiders.length === 0 && !this.over) {
       this.over = true;
       this.winner = ROLE.SEEKER;
-      this.reason = '所有隐藏者已被标记！';
+      this.reason = '所有隐藏者已出局！';
     }
   }
 
   // ---------- 快照 ----------
   snapshot(role, viewerPid) {
-    const ants = this.ants.map(a => {
+    const deposit = this._depositPoint();
+    const visibleAnts = role === ROLE.SEEKER
+      ? this.ants.filter(a => !this._isInsideNest(a))
+      : this.ants;
+    const ants = visibleAnts.map(a => {
       return {
         id: a.id,
         x: Math.round(a.x), y: Math.round(a.y),
         angle: +a.angle.toFixed(2),
         traits: a.traits,
-        marked: a.marked,
+        marked: this._isMarked(a),
         carrying: a.carrying,
         suspicious: this.now < a.suspicious,
         isSelf: role === ROLE.HIDER && a.playerId === viewerPid,
@@ -501,7 +586,18 @@ export class Game {
         capacity: s.capacity,
       })),
       foodActionTime: CONFIG.FOOD_ACTION_TIME,
-      nest: this.nest,
+      nest: {
+        x: Math.round(this.nest.x),
+        y: Math.round(this.nest.y),
+        radius: this._nestRadius(),
+        ...(role !== ROLE.SEEKER && {
+          deposit: {
+            x: Math.round(deposit.x),
+            y: Math.round(deposit.y),
+            radius: this._depositRadius(),
+          },
+        }),
+      },
       bait: this.bait && this.now < this.bait.until ? { x: this.bait.x, y: this.bait.y } : null,
       score: this.score,
       quota: this.quota,

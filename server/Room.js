@@ -76,7 +76,7 @@ export class Room {
       this.endGame(ROLE.HIDER, '搜寻者离开了');
     } else if (this.state === 'playing' && p.role === ROLE.HIDER && this.game) {
       const ant = this.game.ants.find(a => a.playerId === id);
-      if (ant) ant.marked = true;
+      if (ant) ant.eliminated = true;
       this.game._checkWin();
     }
 

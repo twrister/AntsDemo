@@ -336,17 +336,10 @@ export class Game {
     );
   }
 
-  /** 嗅探圈内检测未标记隐藏者；发现后进入冷却，冷却结束前不再触发 */
+  /** 嗅探圈内检测未标记隐藏者；发现后持续警告 warnDuration 秒并结束嗅探 */
   _applySniffDetect() {
     const beam = this.sniffBeam;
-    if (!beam) return;
-    // 提示色短暂保持，本次嗅探已触发过则不再重复
-    if (beam.warnUntil && this.now < beam.warnUntil) {
-      beam.hiderDetected = true;
-      return;
-    }
-    beam.hiderDetected = false;
-    if (beam.detectLockUntil && this.now < beam.detectLockUntil) return;
+    if (!beam || beam.hiderDetected) return;
 
     const r2 = this._sniffRadius() ** 2;
     const src = { x: beam.x, y: beam.y };
@@ -354,9 +347,8 @@ export class Game {
       if (this._isInsideNest(a)) continue;
       if (a.isHider && !a.eliminated && !this._isMarked(a) && dist2(a, src) < r2) {
         beam.hiderDetected = true;
-        beam.warnUntil = this.now + 0.4;
-        // 本次嗅探仅触发一次，直至光束结束
-        beam.detectLockUntil = beam.until;
+        const warn = CONFIG.TOOLS.sniff.warnDuration ?? 1;
+        beam.until = this.now + warn;
         return;
       }
     }

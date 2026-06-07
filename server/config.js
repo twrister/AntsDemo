@@ -26,7 +26,7 @@ export const CONFIG = {
   // 工具 (各工具独立冷却，单位秒)
   TOOLS: {
     panic:   { name: '强光照射', cd: 30, duration: 4, radius: 120, beamSpeed: 280, desc: '在鼠标位置投射强光，范围内 AI 蚂蚁逃离光源，隐藏者不受影响。选中后点击地图开始照射，自动持续 4 秒。' },
-    sniff:   { name: '气息嗅探', cd: 20, duration: 5, radius: 100, beamSpeed: 280, desc: '释放气息探测圈跟随鼠标，范围内有隐藏者时圈变红提示一次。选中后点击地图开始嗅探，自动持续 5 秒。' },
+    sniff:   { name: '气息嗅探', cd: 20, duration: 5, warnDuration: 1, radius: 100, beamSpeed: 280, desc: '释放气息探测圈跟随鼠标，嗅探到隐藏者后圈持续变红警告 1 秒后结束；未嗅探到则持续 5 秒。选中后点击地图开始嗅探。' },
     bait:    { name: '诱饵食屑',   cd: 25, duration: 10, desc: '放置诱饵，靠近的隐藏者会被标为可疑（?）。点击地图施放，持续 10 秒。' },
     freeze:  { name: '群体冻结',   cd: 60, duration: 2,  desc: '冻结全体蚂蚁移动，便于仔细观察外观破绽。立即生效，持续 2 秒。' },
   },

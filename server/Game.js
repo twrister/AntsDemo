@@ -47,9 +47,7 @@ export class Game {
       Object.keys(CONFIG.TOOLS).map((k) => [k, 0]),
     );
     this.markCooldownUntil = 0;
-    this.frozenUntil = 0;
     this.effects = {};
-    this.bait = null;
     this.lightBeam = null; // 强光照射：{ x, y, until }
     this._lastLightBeamUntil = 0; // 上次光束自然结束时刻，用于忽略过期后的残留 active:true
     this.sniffBeam = null; // 气息嗅探：{ x, y, until, hiderDetected }
@@ -273,7 +271,6 @@ export class Game {
       markedUntil: 0,   // 被标中冻结截止时刻；0 表示正常
       lives: isHider ? CONFIG.HIDER_LIVES : 0,
       eliminated: false, // 生命归零或玩家离场等永久出局
-      suspicious: 0,
       vx: 0, vy: 0,
       sprinting: false,
       pickupProgress: 0,
@@ -367,24 +364,6 @@ export class Game {
   _canUseTool(tool) {
     if (this.debugMode) return true;
     return this.now >= (this.toolCooldownUntil[tool] ?? 0);
-  }
-
-  useTool(tool, x, y) {
-    if (this.over) return;
-    const def = CONFIG.TOOLS[tool];
-    if (!def) return;
-    if (!this._canUseTool(tool)) return;
-    if (!this.debugMode) this.toolCooldownUntil[tool] = this.now + def.cd;
-
-    switch (tool) {
-      case 'freeze':
-        this.frozenUntil = this.now + def.duration;
-        break;
-      case 'bait':
-        this.bait = { x, y, until: this.now + def.duration };
-        break;
-    }
-    this.events.push({ t: 'tool', tool, x, y });
   }
 
   /** 持续照射类工具配置：强光照射 / 气息嗅探 */
@@ -580,7 +559,6 @@ export class Game {
       },
       foodSources: this.foodSources,
       phero: this.phero,
-      frozenUntil: this.frozenUntil,
       hidingSpots: this.hidingSpots,
       cfg: this.devCfg,
     };
@@ -614,13 +592,6 @@ export class Game {
   }
 
   _updateHider(ant, dt) {
-    const inHideSpot = this._isInsideHidingSpot(ant);
-    if (this.frozenUntil > this.now && !inHideSpot) return;
-
-    if (!inHideSpot && this.bait && this.now < this.bait.until) {
-      if (dist2(ant, this.bait) < 60 * 60) ant.suspicious = this.now + 10;
-    }
-
     const speedBase = this.devCfg.AI_SPEED_BASE ?? CONFIG.AI_SPEED_BASE;
     const sprintMul = ant.sprinting ? (this.devCfg.AI_SPEED?.sprint ?? CONFIG.AI_SPEED.sprint) : 1.0;
     const carryMul = this._carryMulFor(ant);
@@ -723,7 +694,6 @@ export class Game {
           verified: !!a.verified,
           carrying: a.carrying,
           carryingType: a.carrying ? (a.carryingType || 'normal') : null,
-          suspicious: this.now < a.suspicious,
           isSelf: role === ROLE.HIDER && a.playerId === viewerPid,
           // 隐藏者方始终可见队友色；搜寻者仅对已获证的隐藏者下发真色
           ...(a.isHider && a.hiderColor && (role === ROLE.HIDER || a.verified) && { hiderColor: a.hiderColor }),
@@ -782,7 +752,6 @@ export class Game {
           },
         }),
       },
-      bait: this.bait && this.now < this.bait.until ? { x: this.bait.x, y: this.bait.y } : null,
       hiderScores: role === ROLE.HIDER
         ? this._hiderScoreList()
         : this._hiderScoreList().map(({ color, ...rest }) => rest),
@@ -793,7 +762,6 @@ export class Game {
       ),
       markCdLeft: this._markCdLeft(),
       debugMode: this.debugMode,
-      frozen: this.frozenUntil > this.now,
       lightBeam: this.lightBeam && this.now < this.lightBeam.until
         ? {
             x: this.lightBeam.x,

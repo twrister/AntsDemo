@@ -16,7 +16,6 @@ export const C2S = {
   MOVE:         'move',         // 隐藏者移动 { dx, dy }
   PICKUP:       'pickup',
   MARK:         'mark',         // 搜寻者标记蚂蚁 { antId }
-  USE_TOOL:     'use_tool',     // 搜寻者使用工具 { tool, x, y }
   TOOL_BEAM:    'tool_beam',    // 搜寻者持续照射 { tool, x, y, active }
   CURSOR:       'cursor',       // 搜寻者鼠标世界坐标 { x, y }
   RESTART:      'restart',      // 结算后重开（返回大厅）

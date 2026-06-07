@@ -84,7 +84,7 @@ export class HiderController {
     // 淘汰后固定全图观战（与搜寻者默认缩放一致），不再接收操作
     if (snap.selfEliminated) {
       this._enterSpectator();
-      return { cam: this.cam, frozen: snap.frozen, lightBeam: this._smoothLightBeam(snap, dt), spectator: true };
+      return { cam: this.cam, lightBeam: this._smoothLightBeam(snap, dt), spectator: true };
     }
 
     // 镜头跟随自身蚂蚁
@@ -113,6 +113,6 @@ export class HiderController {
       this._lastSprint = sprint;
     }
 
-    return { cam: this.cam, frozen: snap.frozen, lightBeam: this._smoothLightBeam(snap, dt) };
+    return { cam: this.cam, lightBeam: this._smoothLightBeam(snap, dt) };
   }
 }

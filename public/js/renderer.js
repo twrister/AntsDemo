@@ -20,7 +20,7 @@ export class Renderer {
    * 渲染一帧。
    * @param snap 插值后的世界快照
    * @param cam  镜头 { x, y, zoom } —— 世界坐标中心点
-   * @param opts { role, world, time, viewRadius, frozen, lightBeam, sniffBeam }
+   * @param opts { role, world, time, viewRadius, lightBeam, sniffBeam }
    */
   draw(snap, cam, opts) {
     const ctx = this.ctx;
@@ -45,7 +45,6 @@ export class Renderer {
     this._drawNest(ctx, snap.nest, opts);
     this._drawHidingSpots(ctx, snap.hidingSpots ?? opts.world?.hidingSpots, opts);
     this._drawNormalFood(ctx, snap.normalFood);
-    if (snap.bait) this._drawBait(ctx, snap.bait, opts.time);
     if (opts.lightBeam) this._drawLightBeam(ctx, opts.lightBeam, opts.time);
     if (opts.sniffBeam) this._drawSniffBeam(ctx, opts.sniffBeam, opts.time);
 
@@ -85,7 +84,6 @@ export class Renderer {
       }
       ctx.restore();
     }
-    if (opts.frozen) this._tint(ctx, W, H, 'rgba(120,180,255,0.14)');
   }
 
   /** 计算蚂蚁在强光束内的照明强度（0-1，中心最强） */
@@ -310,15 +308,6 @@ export class Renderer {
     }
   }
 
-  _drawBait(ctx, bait, time) {
-    const pulse = 0.5 + 0.5 * Math.sin(time / 150);
-    ctx.beginPath();
-    ctx.arc(bait.x, bait.y, 60, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(224,169,59,${0.2 + pulse * 0.3})`; ctx.lineWidth = 2; ctx.stroke();
-    ctx.beginPath(); ctx.arc(bait.x, bait.y, 6, 0, Math.PI * 2);
-    ctx.fillStyle = '#e0a93b'; ctx.fill();
-  }
-
   /** 绘制气息嗅探圈：发现目标时变为红色警告色 */
   _drawSniffBeam(ctx, beam, time) {
     const warn = !!beam.hiderDetected;
@@ -467,11 +456,6 @@ export class Renderer {
 
     ctx.restore();
 
-    // 可疑标记 (诱饵)
-    if (ant.suspicious && opts.role === ROLE.SEEKER) {
-      ctx.fillStyle = '#d6543c'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('?', ant.x, ant.y - 20);
-    }
     // 被标记冻结 + 复活倒计时
     if (ant.marked) {
       ctx.strokeStyle = '#d6543c'; ctx.lineWidth = 2;
@@ -608,8 +592,6 @@ export class Renderer {
     ctx.fillRect(0, 0, W, H);
     ctx.restore();
   }
-
-  _tint(ctx, W, H, color) { ctx.fillStyle = color; ctx.fillRect(0, 0, W, H); }
 
   /** 隐藏者视角：绘制搜寻者鼠标位置（俯视大手） */
   _drawSeekerHand(ctx, cursor, time) {

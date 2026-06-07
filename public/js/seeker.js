@@ -1,9 +1,6 @@
 // 搜寻者控制器：镜头平移、视野半径、点击标记、工具使用与各工具独立冷却。
 import { computeFitZoom } from './const.js';
 
-const GLOBAL_TOOLS = ['freeze'];  // 立即生效(全局)
-const BEAM_TOOLS = ['panic', 'sniff']; // 点击左键开始，自动持续照射
-
 export class SeekerController {
   constructor({ canvas, input, net, world }) {
     this.canvas = canvas;
@@ -83,13 +80,7 @@ export class SeekerController {
       if (e.button !== 0) return;
       const wp = this.screenToWorld(m.x, m.y);
       if (this.armedTool) {
-        if (BEAM_TOOLS.includes(this.armedTool)) {
-          this._startBeam(wp, this.armedTool);
-          return;
-        }
-        this.net.send({ type: 'use_tool', tool: this.armedTool, x: wp.x, y: wp.y });
-        this.armedTool = null;
-        this._refreshArmed();
+        this._startBeam(wp, this.armedTool);
         return;
       }
       // 标记最近的蚂蚁 (需在合理半径内，避免误点)
@@ -170,11 +161,7 @@ export class SeekerController {
 
   _activateTool(tool) {
     if (this._isToolBlocked(tool)) return;
-    if (GLOBAL_TOOLS.includes(tool)) {
-      this.net.send({ type: 'use_tool', tool, x: this.cam.x, y: this.cam.y });
-    } else {
-      this.armedTool = tool; // 进入瞄准，等待点击落点
-    }
+    this.armedTool = tool; // 进入瞄准，等待点击落点
     this._refreshArmed();
   }
 
@@ -297,7 +284,6 @@ export class SeekerController {
     return {
       cam: this.cam,
       viewRadius,
-      frozen: snap.frozen,
       lightBeam,
       sniffBeam,
     };

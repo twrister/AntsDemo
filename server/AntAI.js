@@ -16,18 +16,6 @@ export const STATES = ['searching', 'carrying', 'flee', 'social'];
 function rand(a, b) { return a + Math.random() * (b - a); }
 function clampAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
 
-/** 蚂蚁是否处于躲藏点内（免疫群体冻结） */
-function _isInHidingSpot(ant, world) {
-  const spots = world.hidingSpots;
-  if (!spots?.length) return false;
-  for (const s of spots) {
-    const dx = ant.x - s.x, dy = ant.y - s.y;
-    const r = s.radius ?? 45;
-    if (dx * dx + dy * dy < r * r) return true;
-  }
-  return false;
-}
-
 /** 初始化一只 AI 蚂蚁的行为字段 */
 export function initAI(ant) {
   ant.state = 'searching';
@@ -70,13 +58,10 @@ export function triggerFlee(ant, duration, fleeFrom) {
 
 /**
  * 单帧更新一只 AI 蚂蚁（dt 秒）。
- * world 需提供：nest / foodSources / phero(PheromoneField) / frozenUntil / now
+ * world 需提供：nest / foodSources / phero(PheromoneField) / now
  * world.cfg 可选：运行时覆盖 AI_SPEED_BASE / AI_TURN_SMOOTH / AI_SOCIAL_CHANCE / AI_SPEED
  */
 export function updateAI(ant, dt, world) {
-  // 群体冻结（躲藏点内免疫）
-  if (world.frozenUntil > world.now && !_isInHidingSpot(ant, world)) return;
-
   // 合并运行时配置（开发者工具调参）
   const cfg = world.cfg || {};
   const sprintMul = cfg.AI_SPEED?.sprint ?? CONFIG.AI_SPEED.sprint;

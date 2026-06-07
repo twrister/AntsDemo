@@ -35,6 +35,7 @@ export class Game {
       x: CONFIG.WORLD_W * CONFIG.NEST.xRatio,
       y: CONFIG.WORLD_H * CONFIG.NEST.yRatio,
     };
+    this.hidingSpots = this._buildHidingSpots();
     this.events = [];
 
     // 信息素场
@@ -172,6 +173,65 @@ export class Game {
     return dist2(pos, this.nest) < r * r;
   }
 
+  /** 随机生成躲藏点：数量、位置、半径每局略有不同 */
+  _buildHidingSpots() {
+    const cfg = CONFIG.HIDING_SPOTS;
+    const count = cfg.count ?? 3;
+    const rMin = cfg.radiusMin ?? 38;
+    const rMax = cfg.radiusMax ?? 54;
+    const [xMin, xMax] = cfg.xRatioRange ?? [0.15, 0.85];
+    const [yMin, yMax] = cfg.yRatioRange ?? [0.45, 0.82];
+    const minNestDist = cfg.minDistFromNest ?? 220;
+    const minBetween = cfg.minDistBetween ?? 130;
+    const margin = 90;
+
+    const spots = [];
+    for (let attempt = 0; attempt < 400 && spots.length < count; attempt++) {
+      const radius = rand(rMin, rMax);
+      const x = rand(CONFIG.WORLD_W * xMin, CONFIG.WORLD_W * xMax);
+      const y = rand(CONFIG.WORLD_H * yMin, CONFIG.WORLD_H * yMax);
+      if (x < margin || x > CONFIG.WORLD_W - margin || y < margin || y > CONFIG.WORLD_H - margin) {
+        continue;
+      }
+      if (dist2({ x, y }, this.nest) < minNestDist * minNestDist) continue;
+
+      let ok = true;
+      for (const s of spots) {
+        const gap = s.radius + radius + minBetween;
+        if (dist2({ x, y }, s) < gap * gap) { ok = false; break; }
+      }
+      if (!ok) continue;
+
+      spots.push({ id: spots.length, x, y, radius });
+    }
+
+    // 极端情况下凑不满时，用固定锚点 + 随机半径兜底
+    const fallbacks = [
+      { xRatio: 0.28, yRatio: 0.58 },
+      { xRatio: 0.72, yRatio: 0.55 },
+      { xRatio: 0.50, yRatio: 0.75 },
+    ];
+    while (spots.length < count) {
+      const fb = fallbacks[spots.length];
+      spots.push({
+        id: spots.length,
+        x: CONFIG.WORLD_W * fb.xRatio + rand(-40, 40),
+        y: CONFIG.WORLD_H * fb.yRatio + rand(-35, 35),
+        radius: rand(rMin, rMax),
+      });
+    }
+    return spots;
+  }
+
+  /** 点是否处于任一躲藏点内（免疫工具与标记） */
+  _isInsideHidingSpot(pos) {
+    for (const spot of this.hidingSpots) {
+      const r = spot.radius ?? 45;
+      if (dist2(pos, spot) < r * r) return true;
+    }
+    return false;
+  }
+
   /** 在巢穴区域内随机取一点（用于出生/复活） */
   _randomPosInNest() {
     const spawnR = this._nestRadius() * 0.55;
@@ -262,6 +322,8 @@ export class Game {
     if (this.over || this.now < this.markCooldownUntil) return;
     const ant = this.ants.find(a => a.id === antId);
     if (!ant || this._isMarked(ant)) return;
+    // 躲藏点内免疫标记
+    if (this._isInsideHidingSpot(ant)) return;
     // 已获证或已淘汰的隐藏者不可再被标记
     if (ant.isHider && (ant.verified || ant.eliminated)) return;
     if (ant.isHider) {
@@ -381,7 +443,7 @@ export class Game {
     const r2 = this._sniffRadius() ** 2;
     const src = { x: beam.x, y: beam.y };
     for (const a of this.ants) {
-      if (this._isInsideNest(a)) continue;
+      if (this._isInsideNest(a) || this._isInsideHidingSpot(a)) continue;
       if (a.isHider && !a.eliminated && !this._isMarked(a) && dist2(a, src) < r2) {
         beam.hiderDetected = true;
         const warn = CONFIG.TOOLS.sniff.warnDuration ?? 1;
@@ -398,7 +460,9 @@ export class Game {
     const r2 = def.radius * def.radius;
     const src = { x: this.lightBeam.x, y: this.lightBeam.y };
     for (const a of this.ants) {
-      if (!a.isHider && dist2(a, src) < r2) triggerFlee(a, 0.4, src);
+      if (!a.isHider && !this._isInsideHidingSpot(a) && dist2(a, src) < r2) {
+        triggerFlee(a, 0.4, src);
+      }
     }
   }
 
@@ -517,6 +581,7 @@ export class Game {
       foodSources: this.foodSources,
       phero: this.phero,
       frozenUntil: this.frozenUntil,
+      hidingSpots: this.hidingSpots,
       cfg: this.devCfg,
     };
 
@@ -549,9 +614,10 @@ export class Game {
   }
 
   _updateHider(ant, dt) {
-    if (this.frozenUntil > this.now) return;
+    const inHideSpot = this._isInsideHidingSpot(ant);
+    if (this.frozenUntil > this.now && !inHideSpot) return;
 
-    if (this.bait && this.now < this.bait.until) {
+    if (!inHideSpot && this.bait && this.now < this.bait.until) {
       if (dist2(ant, this.bait) < 60 * 60) ant.suspicious = this.now + 10;
     }
 
@@ -632,29 +698,39 @@ export class Game {
       ? this.ants.filter(a => !this._isInsideNest(a))
       : this.ants
     ).filter(a => !(a.isHider && a.eliminated));
-    const ants = visibleAnts.map(a => ({
-        id: a.id,
-        x: Math.round(a.x), y: Math.round(a.y),
-        angle: +a.angle.toFixed(2),
-        traits: a.traits,
-        marked: this._isMarked(a),
-        ...(this._isMarked(a) && {
-          markedLeft: Math.ceil(a.markedUntil - this.now),
-        }),
-        ...(a.isHider && {
-          lives: a.lives,
-          eliminated: a.eliminated,
-        }),
-        verified: !!a.verified,
-        carrying: a.carrying,
-        carryingType: a.carrying ? (a.carryingType || 'normal') : null,
-        suspicious: this.now < a.suspicious,
-        isSelf: role === ROLE.HIDER && a.playerId === viewerPid,
-        // 隐藏者方始终可见队友色；搜寻者仅对已获证的隐藏者下发真色
-        ...(a.isHider && a.hiderColor && (role === ROLE.HIDER || a.verified) && { hiderColor: a.hiderColor }),
-        pickup: role === ROLE.HIDER && a.playerId === viewerPid ? +a.pickupProgress.toFixed(2) : 0,
-        deposit: role === ROLE.HIDER && a.playerId === viewerPid ? +a.depositProgress.toFixed(2) : 0,
-      }));
+    const ants = visibleAnts.map((a) => {
+        const base = {
+          id: a.id,
+          x: Math.round(a.x),
+          y: Math.round(a.y),
+          angle: +a.angle.toFixed(2),
+        };
+        // 搜寻者视角：躲藏点内且未获证 → 仅下发影子所需字段
+        if (role === ROLE.SEEKER && this._isInsideHidingSpot(a) && !a.verified) {
+          return { ...base, hiding: true };
+        }
+        return {
+          ...base,
+          traits: a.traits,
+          marked: this._isMarked(a),
+          ...(this._isMarked(a) && {
+            markedLeft: Math.ceil(a.markedUntil - this.now),
+          }),
+          ...(a.isHider && {
+            lives: a.lives,
+            eliminated: a.eliminated,
+          }),
+          verified: !!a.verified,
+          carrying: a.carrying,
+          carryingType: a.carrying ? (a.carryingType || 'normal') : null,
+          suspicious: this.now < a.suspicious,
+          isSelf: role === ROLE.HIDER && a.playerId === viewerPid,
+          // 隐藏者方始终可见队友色；搜寻者仅对已获证的隐藏者下发真色
+          ...(a.isHider && a.hiderColor && (role === ROLE.HIDER || a.verified) && { hiderColor: a.hiderColor }),
+          pickup: role === ROLE.HIDER && a.playerId === viewerPid ? +a.pickupProgress.toFixed(2) : 0,
+          deposit: role === ROLE.HIDER && a.playerId === viewerPid ? +a.depositProgress.toFixed(2) : 0,
+        };
+      });
 
     // 信息素快照：每 2 tick 重新计算一次（降低序列化开销）
     let pheroSnap = null;
@@ -689,6 +765,11 @@ export class Game {
         score: this._foodTypeConfig(s.type).score ?? 1,
       })),
       foodActionTime: CONFIG.FOOD_ACTION_TIME,
+      hidingSpots: this.hidingSpots.map((s) => ({
+        x: Math.round(s.x),
+        y: Math.round(s.y),
+        radius: s.radius,
+      })),
       nest: {
         x: Math.round(this.nest.x),
         y: Math.round(this.nest.y),

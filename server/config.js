@@ -65,6 +65,18 @@ export const CONFIG = {
     coarseFactor: 2,        // 快照降采样倍数（降带宽），输出 40×30
   },
 
+  // ---------- 躲藏点（蚂蚁在内免疫工具与标记，搜寻者只见影子）----------
+  HIDING_SPOTS: {
+    count: 3,
+    radiusMin: 38,
+    radiusMax: 54,
+    /** 生成区域（世界坐标比例），地图中下部 */
+    xRatioRange: [0.15, 0.85],
+    yRatioRange: [0.45, 0.82],
+    minDistFromNest: 220,   // 距巢穴中心最小距离 (px)
+    minDistBetween: 130,    // 两躲藏点边缘最小间距 (px)
+  },
+
   // ---------- 巢穴 ----------
   NEST: {
     xRatio: 0.5,            // 巢心 X = WORLD_W * xRatio（地图水平居中）

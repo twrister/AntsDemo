@@ -197,6 +197,11 @@ export class Room {
           viewRatio: CONFIG.SEEKER_VIEW_RATIO,
           tools: CONFIG.TOOLS,
           debugMode: !!opts.debugMode,
+          hidingSpots: this.game.hidingSpots.map((s) => ({
+            x: Math.round(s.x),
+            y: Math.round(s.y),
+            radius: s.radius,
+          })),
         },
         antId: ant ? ant.id : null,
       });

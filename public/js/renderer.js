@@ -43,6 +43,7 @@ export class Renderer {
       this._drawPheromone(ctx, this._cachedPhero, snap.nest, opts);
     }
     this._drawNest(ctx, snap.nest, opts);
+    this._drawHidingSpots(ctx, snap.hidingSpots ?? opts.world?.hidingSpots, opts);
     this._drawNormalFood(ctx, snap.normalFood);
     if (snap.bait) this._drawBait(ctx, snap.bait, opts.time);
     if (opts.lightBeam) this._drawLightBeam(ctx, opts.lightBeam, opts.time);
@@ -50,7 +51,11 @@ export class Renderer {
 
     for (const ant of snap.ants) {
       if (this._shouldHideAntInNest(ant, snap.nest, opts)) continue;
-      this._drawAnt(ctx, ant, opts);
+      if (ant.hiding && opts.role === ROLE.SEEKER) {
+        this._drawAntShadow(ctx, ant, opts);
+      } else {
+        this._drawAnt(ctx, ant, opts);
+      }
     }
     // 隐藏者可见搜寻者鼠标位置（大手）
     if (opts.role === ROLE.HIDER && snap.seekerCursor) {
@@ -74,7 +79,9 @@ export class Renderer {
       for (const ant of snap.ants) {
         if (this._shouldHideAntInNest(ant, snap.nest, opts)) continue;
         const illum = this._beamIllumination(ant, opts.lightBeam);
-        if (illum > 0.06) this._drawAnt(ctx, ant, opts, illum);
+        if (illum <= 0.06) continue;
+        if (ant.hiding) this._drawAntShadow(ctx, ant, opts, illum);
+        else this._drawAnt(ctx, ant, opts, illum);
       }
       ctx.restore();
     }
@@ -116,6 +123,81 @@ export class Renderer {
     if (!nest?.radius) return false;
     const dx = x - nest.x, dy = y - nest.y;
     return dx * dx + dy * dy < nest.radius * nest.radius;
+  }
+
+  /** 绘制躲藏点区域：隐藏者见完整提示，搜寻者见暗色遮蔽区 */
+  _drawHidingSpots(ctx, spots, opts) {
+    if (!spots?.length) return;
+    const isSeeker = opts?.role === ROLE.SEEKER;
+    for (const spot of spots) {
+      const r = spot.radius || 45;
+      ctx.beginPath();
+      ctx.arc(spot.x, spot.y, r, 0, Math.PI * 2);
+      if (isSeeker) {
+        ctx.fillStyle = 'rgba(18,14,8,0.72)';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(60,48,32,0.55)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // 遮蔽纹理：几条斜线暗示缝隙
+        ctx.save();
+        ctx.clip();
+        ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+        ctx.lineWidth = 1.5;
+        for (let i = -r; i < r; i += 14) {
+          ctx.beginPath();
+          ctx.moveTo(spot.x + i, spot.y - r);
+          ctx.lineTo(spot.x + i + r * 0.6, spot.y + r);
+          ctx.stroke();
+        }
+        ctx.restore();
+      } else {
+        const pulse = 0.92 + 0.08 * Math.sin(opts.time / 900 + spot.x);
+        ctx.fillStyle = `rgba(35,50,28,${(0.55 * pulse).toFixed(3)})`;
+        ctx.fill();
+        ctx.strokeStyle = `rgba(100,140,80,${(0.65 * pulse).toFixed(3)})`;
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+        ctx.fillStyle = '#9bc48a';
+        ctx.font = '12px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('躲藏', spot.x, spot.y - r * 0.55);
+      }
+    }
+  }
+
+  /**
+   * 搜寻者视角：躲藏点内蚂蚁的影子（无外观特征，仅轮廓）
+   * @param illum 强光照明强度 0-1，提亮影子便于辨认
+   */
+  _drawAntShadow(ctx, ant, opts, illum = 0) {
+    const flicker = 0.55 + 0.12 * Math.sin(opts.time / 220 + ant.id * 1.7);
+    const alpha = Math.min(0.85, flicker + illum * 0.35);
+    ctx.save();
+    ctx.translate(ant.x, ant.y);
+    ctx.rotate(ant.angle + Math.PI / 2);
+    if (illum > 0.1) {
+      ctx.shadowColor = `rgba(255,240,200,${(0.3 + illum * 0.4).toFixed(2)})`;
+      ctx.shadowBlur = 3 + illum * 8;
+    }
+    ctx.fillStyle = `rgba(8,6,4,${alpha.toFixed(3)})`;
+    // 简化蚁形剪影：头 + 腹
+    ctx.beginPath();
+    ctx.ellipse(0, 7, 5.5, 9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(0, -7, 4.5, 0, Math.PI * 2);
+    ctx.fill();
+    // 腿影
+    ctx.strokeStyle = `rgba(6,4,2,${(alpha * 0.9).toFixed(3)})`;
+    ctx.lineWidth = 1.6;
+    for (const s of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(s * 9, s * 3);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   _drawNest(ctx, nest, opts) {

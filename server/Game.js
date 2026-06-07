@@ -34,6 +34,8 @@ export class Game {
     this.ants = [];
     this._nextAntId = 0;  // 全局自增 ID，避免 _adjustAntCount 增量时 ID 重复
     this.foodSources = [];
+    this.fakeFoods = [];       // 搜寻者放置的假食物，AI 不可见、不搬运、不释放信息素
+    this._nextFakeFoodId = 0;
     this.nest = {
       x: CONFIG.WORLD_W * CONFIG.NEST.xRatio,
       y: CONFIG.WORLD_H * CONFIG.NEST.yRatio,
@@ -390,6 +392,40 @@ export class Game {
     sniff: { field: 'sniffBeam', lastUntil: '_lastSniffBeamUntil' },
   };
 
+  /** 点击放置类工具（非光束） */
+  static PLACE_TOOLS = new Set(['fakeFood']);
+
+  /**
+   * 搜寻者放置假食物：不释放信息素，AI 不可见，真人尝试搬运时触发警告高亮。
+   */
+  placeFakeFood(x, y) {
+    const tool = 'fakeFood';
+    if (this.over || !Game.PLACE_TOOLS.has(tool)) return;
+    if (!this._canUseTool(tool)) return;
+
+    const def = CONFIG.TOOLS.fakeFood;
+    const maxCount = def.maxCount ?? 8;
+    if (this.fakeFoods.length >= maxCount) return;
+
+    const margin = 24;
+    const px = Math.max(margin, Math.min(CONFIG.WORLD_W - margin, x));
+    const py = Math.max(margin, Math.min(CONFIG.WORLD_H - margin, y));
+
+    const capacity = this._foodCapacity();
+    this.fakeFoods.push({
+      id: this._nextFakeFoodId++,
+      x: px,
+      y: py,
+      amount: capacity,
+      capacity,
+      warnUntil: 0,
+    });
+
+    this._toolsUsed = true;
+    if (!this.noToolCd) this.toolCooldownUntil[tool] = this.now + this._toolCd(tool);
+    this.events.push({ t: 'tool', tool, x: px, y: py });
+  }
+
   /**
    * 持续照射类工具：点击开始后更新光束位置，自动持续至时长结束。
    */
@@ -543,6 +579,46 @@ export class Game {
     return best;
   }
 
+  /** 找到进入拾取范围的最近假食物（仅真人隐藏者交互） */
+  _nearestFakeFood(ant) {
+    const r2 = CONFIG.FOOD.pickupRadius * CONFIG.FOOD.pickupRadius;
+    let best = null, bd = r2;
+    for (const s of this.fakeFoods) {
+      const d = dist2(ant, s);
+      if (d < bd) { bd = d; best = s; }
+    }
+    return best;
+  }
+
+  /**
+   * 真人隐藏者尝试搬运假食物：完成取食动作后不搬运，触发短暂警告高亮。
+   * @returns {boolean} 是否处于取食等待中
+   */
+  _processFakeFoodAction(ant, dt) {
+    if (!ant.isHider || ant.bot || ant.carrying) return false;
+
+    const src = this._nearestFakeFood(ant);
+    const pickupR2 = CONFIG.FOOD.pickupRadius * CONFIG.FOOD.pickupRadius;
+    if (!src || dist2(ant, src) >= pickupR2) {
+      ant.pickupProgress = 0;
+      return false;
+    }
+    if (ant.vx || ant.vy) {
+      ant.pickupProgress = 0;
+      return false;
+    }
+
+    const actionTime = CONFIG.FOOD_ACTION_TIME;
+    ant.pickupProgress += dt;
+    if (ant.pickupProgress < actionTime) return true;
+
+    ant.pickupProgress = 0;
+    const warnDur = CONFIG.TOOLS.fakeFood.warnDuration ?? 1.5;
+    src.warnUntil = this.now + warnDur;
+    this.events.push({ t: 'fake_food_warn', x: src.x, y: src.y, antId: ant.id });
+    return false;
+  }
+
   // ---------- 主循环 ----------
   update(dt) {
     if (this.over) return;
@@ -593,7 +669,18 @@ export class Game {
     for (const ant of this.ants) {
       if (this._isMarked(ant)) continue;
       if (ant.isHider && ant.eliminated) continue;
-      const foodBusy = this._processFoodAction(ant, dt);
+      // 真人隐藏者取食：真/假食物互斥处理，避免 _processFoodAction 每帧清零 pickupProgress
+      let foodBusy;
+      if (ant.isHider && !ant.bot && !ant.carrying) {
+        const fake = this._nearestFakeFood(ant);
+        const real = this._nearestFoodSource(ant);
+        const useFake = fake && (!real || dist2(ant, fake) <= dist2(ant, real));
+        foodBusy = useFake
+          ? this._processFakeFoodAction(ant, dt)
+          : this._processFoodAction(ant, dt);
+      } else {
+        foodBusy = this._processFoodAction(ant, dt);
+      }
       if (ant.isHider && !ant.bot) {
         if (!foodBusy) this._updateHider(ant, dt);
       } else if (!foodBusy) {
@@ -752,6 +839,13 @@ export class Game {
         capacity: s.capacity,
         type: s.type || 'normal',
         score: this._foodTypeConfig(s.type).score ?? 1,
+      })),
+      fakeFood: this.fakeFoods.map(f => ({
+        x: Math.round(f.x),
+        y: Math.round(f.y),
+        amount: f.amount,
+        capacity: f.capacity,
+        warnLeft: +Math.max(0, f.warnUntil - this.now).toFixed(2),
       })),
       foodActionTime: CONFIG.FOOD_ACTION_TIME,
       hidingSpots: this.hidingSpots.map((s) => ({

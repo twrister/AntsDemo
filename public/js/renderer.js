@@ -45,6 +45,7 @@ export class Renderer {
     this._drawNest(ctx, snap.nest, opts);
     this._drawHidingSpots(ctx, snap.hidingSpots ?? opts.world?.hidingSpots, opts);
     this._drawNormalFood(ctx, snap.normalFood);
+    this._drawFakeFood(ctx, snap.fakeFood, opts);
     if (opts.lightBeam) this._drawLightBeam(ctx, opts.lightBeam, opts.time);
     if (opts.sniffBeam) this._drawSniffBeam(ctx, opts.sniffBeam, opts.time);
 
@@ -271,6 +272,55 @@ export class Renderer {
           ctx.fillStyle = `rgba(230,80,200,${(h / 255 * 0.42).toFixed(3)})`;
           ctx.fillRect(x, y, cell, cell);
         }
+      }
+    }
+  }
+
+  /**
+   * 绘制假食物：隐藏者视角与真食物相同；搜寻者可见虚线描边以示区别。
+   * warnLeft > 0 时叠加短暂红色高亮警告环。
+   */
+  _drawFakeFood(ctx, food, opts) {
+    if (!food?.length) return;
+    const isSeeker = opts.role === ROLE.SEEKER;
+    const time = opts.time ?? 0;
+    for (const f of food) {
+      const ratio = (f.capacity > 0) ? f.amount / f.capacity : 0;
+      const r = 4 + ratio * 8;
+      const alpha = 0.4 + ratio * 0.6;
+      const fill = `rgba(143,179,107,${alpha.toFixed(2)})`;
+      const stroke = isSeeker
+        ? `rgba(180,140,220,${(alpha * 0.85).toFixed(2)})`
+        : `rgba(200,230,160,${(alpha * 0.6).toFixed(2)})`;
+      ctx.beginPath();
+      ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.setLineDash(isSeeker ? [4, 3] : []);
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = isSeeker ? 2 : 1.5;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      if (isSeeker) {
+        ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(200,170,255,0.9)';
+        ctx.fillText('假', f.x, f.y - r - 6);
+      }
+      if (f.warnLeft > 0) {
+        const pulse = 0.65 + 0.35 * Math.sin(time / 50);
+        const warnR = r + 10 + (1 - f.warnLeft / 1.5) * 6;
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, warnR, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255,70,40,${(0.85 * pulse).toFixed(3)})`;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, warnR + 4, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(255,200,60,${(0.45 * pulse).toFixed(3)})`;
+        ctx.lineWidth = 2;
+        ctx.stroke();
       }
     }
   }

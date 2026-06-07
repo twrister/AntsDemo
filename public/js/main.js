@@ -38,6 +38,7 @@ const AI_ANT_COUNT_MAX = 200;
 const TOOL_CD_META = {
   panic: { label: '强光照射 CD', min: 0, max: 30, default: 30 },
   sniff: { label: '气息嗅探 CD', min: 0, max: 30, default: 20 },
+  fakeFood: { label: '假食物 CD', min: 0, max: 60, default: 25 },
 };
 
 const DEV_DEFAULTS = {
@@ -687,6 +688,10 @@ function handleEvent(e) {
         : `${e.label || '隐藏者'} 已获证！`, 'good');
       break;
     case 'tool':       if (role === ROLE.SEEKER) toast('使用了工具', ''); break;
+    case 'fake_food_warn':
+      if (role === ROLE.HIDER) toast('这是假食物！', 'bad');
+      else if (role === ROLE.SEEKER) toast('隐藏者触碰了假食物', 'good');
+      break;
   }
 }
 

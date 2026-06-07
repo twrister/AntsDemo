@@ -32,8 +32,9 @@ export const CONFIG = {
 
   // 工具 (各工具独立冷却，单位秒；开局默认处于满 CD 状态)
   TOOLS: {
-    panic:   { name: '强光照射', cd: 30, duration: 4, radius: 120, beamSpeed: 280, desc: '在鼠标位置投射强光，范围内 AI 蚂蚁逃离光源，隐藏者不受影响。选中后点击地图开始照射，自动持续 4 秒。' },
-    sniff:   { name: '气息嗅探', cd: 20, duration: 5, warnDuration: 1, radius: 100, beamSpeed: 280, desc: '释放气息探测圈跟随鼠标，嗅探到隐藏者后圈持续变红警告 1 秒后结束；未嗅探到则持续 5 秒。选中后点击地图开始嗅探。' },
+    panic:    { name: '强光照射', cd: 30, duration: 4, radius: 120, beamSpeed: 280, desc: '在鼠标位置投射强光，范围内 AI 蚂蚁逃离光源，隐藏者不受影响。选中后点击地图开始照射，自动持续 4 秒。' },
+    sniff:    { name: '气息嗅探', cd: 20, duration: 5, warnDuration: 1, radius: 100, beamSpeed: 280, desc: '释放气息探测圈跟随鼠标，嗅探到隐藏者后圈持续变红警告 1 秒后结束；未嗅探到则持续 5 秒。选中后点击地图开始嗅探。' },
+    fakeFood: { name: '假食物', cd: 25, warnDuration: 1.5, maxCount: 8, desc: '在点击位置放置假食物堆，外观与真食物相同。AI 蚂蚁不可见且不搬运；真人蚂蚁尝试搬运时会触发短暂高亮警告，不会得分。' },
   },
   /** 调试模式下搜寻者工具是否无 CD（标记冷却不受影响）；默认关闭 */
   DEBUG_NO_CD: false,

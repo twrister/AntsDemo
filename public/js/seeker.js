@@ -1,6 +1,9 @@
 // 搜寻者控制器：镜头平移、视野半径、点击标记、工具使用与各工具独立冷却。
 import { computeFitZoom } from './const.js';
 
+/** 点击地图即放置的工具（非光束类） */
+const PLACE_TOOLS = new Set(['fakeFood']);
+
 export class SeekerController {
   constructor({ canvas, input, net, world }) {
     this.canvas = canvas;
@@ -81,7 +84,11 @@ export class SeekerController {
       if (e.button !== 0) return;
       const wp = this.screenToWorld(m.x, m.y);
       if (this.armedTool) {
-        this._startBeam(wp, this.armedTool);
+        if (PLACE_TOOLS.has(this.armedTool)) {
+          this._placeTool(wp, this.armedTool);
+        } else {
+          this._startBeam(wp, this.armedTool);
+        }
         return;
       }
       // 标记最近的蚂蚁 (需在合理半径内，避免误点)
@@ -132,6 +139,16 @@ export class SeekerController {
   /** 收到误标事件后立即锁定标记，避免等下一帧快照 */
   onMarkMiss() {
     this._localMarkCdUntil = Math.max(this._localMarkCdUntil, performance.now() + 5000);
+  }
+
+  /** 点击放置类工具：在地图落点生成实体（如假食物） */
+  _placeTool(wp, tool) {
+    if (this._isToolBlocked(tool)) return;
+    if (tool === 'fakeFood') {
+      this.net.send({ type: 'place_fake_food', x: wp.x, y: wp.y });
+    }
+    this.armedTool = null;
+    this._refreshArmed();
   }
 
   /** 持续照射类工具：点击地图开始，自动持续至时长结束 */

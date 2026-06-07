@@ -76,7 +76,7 @@ export function updateAI(ant, dt, world) {
     return;
   }
 
-  // --- social：原地梳毛，小概率偶发 ---
+  // --- social（待机）：原地梳毛，小概率偶发 ---
   if (ant.state === 'social') {
     ant.stateTimer -= dt;
     if (ant.stateTimer <= 0) ant.state = ant.carrying ? 'carrying' : 'searching';
@@ -125,7 +125,7 @@ function _updateSearching(ant, dt, world, cfg) {
 
   // 取/放食物由 Game._processFoodAction 统一处理
 
-  // 低概率进入社交（梳毛），不影响信息素场
+  // 低概率进入待机（梳毛），不影响信息素场
   const socialChance = cfg.AI_SOCIAL_CHANCE ?? CONFIG.AI_SOCIAL_CHANCE;
   if (Math.random() < socialChance * dt) {
     ant.state = 'social';

@@ -47,7 +47,7 @@ export class Game {
     this.phero = new PheromoneField();
     this._pheroTickCount = 0; // 每 2 tick 才生成一次信息素快照以节省带宽
 
-    // 工具状态（各工具独立 CD，开局默认进入冷却）
+    // 工具状态（各工具独立 CD，开局统一进入 TOOL_STARTING_CD 冷却）
     this.toolCooldownUntil = {};
     this._toolsUsed = false;
     this.markCooldownUntil = 0;
@@ -81,10 +81,11 @@ export class Game {
     return CONFIG.TOOLS[tool]?.cd ?? 0;
   }
 
-  /** 开局或 dev 调参后、尚未使用任何工具时，将所有工具置为满 CD */
+  /** 开局或 dev 调参后、尚未使用任何工具时，将所有工具置为统一开局 CD */
   _resetStartingToolCooldowns() {
+    const startCd = CONFIG.TOOL_STARTING_CD ?? 5;
     for (const k of Object.keys(CONFIG.TOOLS)) {
-      this.toolCooldownUntil[k] = this.noToolCd ? 0 : this.now + this._toolCd(k);
+      this.toolCooldownUntil[k] = this.noToolCd ? 0 : this.now + startCd;
     }
   }
 

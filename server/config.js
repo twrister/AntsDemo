@@ -30,7 +30,8 @@ export const CONFIG = {
   // 外观破绽
   TRAIT_DEVIANCE_VISIBILITY: 0.15, // 特征偏差可见度 15%
 
-  // 工具 (各工具独立冷却，单位秒；开局默认处于满 CD 状态)
+  // 工具 (各工具独立冷却，单位秒；开局统一进入 TOOL_STARTING_CD 冷却)
+  TOOL_STARTING_CD: 5, // 开局所有工具共用冷却 (秒)，使用后仍走各工具 cd
   TOOLS: {
     panic:    { name: '强光照射', cd: 30, duration: 4, radius: 120, beamSpeed: 280, desc: '在鼠标位置投射强光，范围内 AI 蚂蚁逃离光源，隐藏者不受影响。选中后点击地图开始照射，自动持续 4 秒。' },
     sniff:    { name: '气息嗅探', cd: 20, duration: 5, warnDuration: 1, radius: 100, beamSpeed: 280, desc: '释放气息探测圈跟随鼠标，嗅探到隐藏者后圈持续变红警告 1 秒后结束；未嗅探到则持续 5 秒。选中后点击地图开始嗅探。' },
@@ -48,9 +49,9 @@ export const CONFIG = {
   SEEKER_VIEW_RATIO: 0.6,   // 屏幕 60%
 
   // AI 行为铁律
-  AI_PAUSE_MAX: 0.8,        // 非社交状态最长停顿 (秒)
+  AI_PAUSE_MAX: 0.8,        // 非待机状态最长停顿 (秒)
   AI_TURN_SMOOTH: 0.3,      // 转弯减速曲线 (秒)
-  AI_SOCIAL_CHANCE: 0.05,   // 空闲触发社交概率
+  AI_SOCIAL_CHANCE: 0.05,   // 空闲触发待机概率
   AI_SPEED_BASE: 60,        // 基准速度 (像素/秒)
   /** 速度叠加倍率：最终速度 = base × (加速中 ? sprint : 1.0) × (搬运中 ? carry/carryRich : 1.0) */
   AI_SPEED: { sprint: 1.5, carry: 0.8 }, // carry 普通食物默认；珍稀见 FOOD.RICH.carryMul，调试端口可热改 carryRich

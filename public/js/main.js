@@ -434,7 +434,10 @@ function updateDevAntStats(snap) {
 function handleEvent(e) {
   switch (e.t) {
     case 'mark_hit':   toast('标记命中！隐藏者被淘汰', 'good'); break;
-    case 'mark_miss':  toast('误标记！工具锁死中', 'bad'); break;
+    case 'mark_miss':
+      toast('误标记！AI 逃窜中，标记冷却', 'bad');
+      controller?.onMarkMiss?.();
+      break;
     case 'food_pickup': if (role === ROLE.HIDER) toast('拿到食物，送回巢穴', 'good'); break;
     case 'score':      toast(`食物已送达 (${e.score})`, 'good'); break;
     case 'tool':       if (role === ROLE.SEEKER) toast('使用了工具', ''); break;

@@ -27,6 +27,12 @@ export class Net {
   on(type, cb) { this.handlers[type] = cb; }
   send(obj) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(obj)); }
 
+  /** 最新快照（无插值延迟，用于标记冷却等即时判定） */
+  latestSnap() {
+    if (this.buffer.length === 0) return null;
+    return this.buffer[this.buffer.length - 1].snap;
+  }
+
   // 取出用于渲染的插值快照
   interpolated() {
     if (this.buffer.length === 0) return null;

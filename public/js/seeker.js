@@ -16,6 +16,7 @@ export class SeekerController {
     this.armedTool = null;        // 已选中待施放的瞄准类工具
     this.toolKeys = Object.keys(world.tools); // 工具顺序
     this.lastSnap = null;
+    this._localMarkCdUntil = 0; // 误标后本地预判冷却，弥补快照延迟
 
     this.beamActive = false;
     this._localBeam = null;
@@ -90,6 +91,7 @@ export class SeekerController {
         return;
       }
       // 标记最近的蚂蚁 (需在合理半径内，避免误点)
+      if (this._isMarkBlocked()) return;
       const ant = this._antAt(wp.x, wp.y);
       if (ant) this.net.send({ type: 'mark', antId: ant.id });
     });
@@ -111,11 +113,31 @@ export class SeekerController {
     this._localBeam.y += (dy / dist) * maxMove;
   }
 
-  /** 判断某工具是否被锁死或处于独立 CD 中 */
+  /** 判断某工具是否处于独立 CD 中 */
   _isToolBlocked(tool, snap = this.lastSnap) {
     if (this.debugMode || !snap) return false;
-    if (snap.lockLeft > 0) return true;
     return (snap.toolCooldownLeft?.[tool] ?? 0) > 0;
+  }
+
+  /** 用于标记判定的最新快照（优先无延迟版本） */
+  _markSnap() {
+    return this.net.latestSnap?.() ?? this.lastSnap;
+  }
+
+  /** 本地预判的标记冷却剩余 (秒) */
+  _localMarkCdLeft() {
+    return Math.max(0, (this._localMarkCdUntil - performance.now()) / 1000);
+  }
+
+  /** 标记功能是否在冷却中（调试模式仅豁免工具 CD，标记冷却始终生效） */
+  _isMarkBlocked(snap = this._markSnap()) {
+    const serverCd = snap?.markCdLeft ?? 0;
+    return Math.max(serverCd, this._localMarkCdLeft()) > 0;
+  }
+
+  /** 收到误标事件后立即锁定标记，避免等下一帧快照 */
+  onMarkMiss() {
+    this._localMarkCdUntil = Math.max(this._localMarkCdUntil, performance.now() + 5000);
   }
 
   /** 强光照射：点击地图开始，自动持续至时长结束 */
@@ -191,6 +213,13 @@ export class SeekerController {
   // 每帧更新：工具冷却 UI，并返回渲染参数
   update(snap, dt = 0) {
     this.lastSnap = snap;
+    // 与服务器同步本地标记冷却
+    if ((snap.markCdLeft ?? 0) > 0) {
+      this._localMarkCdUntil = Math.max(
+        this._localMarkCdUntil,
+        performance.now() + snap.markCdLeft * 1000,
+      );
+    }
     this.cam.zoom = this.baseZoom;
     this._clampCam();
 
@@ -216,15 +245,18 @@ export class SeekerController {
       }
     }
 
-    // 各工具独立冷却 / 误标记全工具锁死遮罩（调试模式无限制）
+    // 各工具独立冷却遮罩（调试模式无限制）
     for (const key of this.toolKeys) {
       const cover = this.toolEls[key].querySelector('.cover');
       const cdLeft = snap.toolCooldownLeft?.[key] ?? 0;
-      const blocked = !this.debugMode && (snap.lockLeft > 0 || cdLeft > 0);
-      const label = snap.lockLeft > 0 ? snap.lockLeft.toFixed(0) : cdLeft.toFixed(0);
-      if (blocked) { cover.classList.remove('hidden'); cover.textContent = label; }
+      const blocked = !this.debugMode && cdLeft > 0;
+      if (blocked) { cover.classList.remove('hidden'); cover.textContent = cdLeft.toFixed(0); }
       else cover.classList.add('hidden');
     }
+
+    // 标记冷却期间鼠标显示不可点击样式
+    const markBlocked = this._isMarkBlocked(snap) && !this.armedTool;
+    this.canvas.classList.toggle('mark-cooldown', markBlocked);
     if (this.armedTool && this._isToolBlocked(this.armedTool, snap)) {
       this.armedTool = null;
       this._refreshArmed();

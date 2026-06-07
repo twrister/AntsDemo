@@ -24,7 +24,8 @@ export const CONFIG = {
     bait:    { name: '诱饵食屑',   cd: 25, duration: 10, desc: '放置诱饵，靠近的隐藏者会被标为可疑（?）。点击地图施放，持续 10 秒。' },
     freeze:  { name: '群体冻结',   cd: 60, duration: 2,  desc: '冻结全体蚂蚁移动，便于仔细观察外观破绽。立即生效，持续 2 秒。' },
   },
-  MISMARK_PENALTY: 10,      // 误标记全工具锁死 (秒)
+  MARK_COOLDOWN: { min: 3, max: 5 }, // 误标记后标记功能冷却 (秒)
+  MISMARK_FLEE_DURATION: 1.2,          // 误标 AI 逃窜时长 (秒)
 
   // 搜寻者视野
   SEEKER_VIEW_RATIO: 0.6,   // 屏幕 60%

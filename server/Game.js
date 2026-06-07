@@ -24,7 +24,7 @@ function moveToward(pos, target, maxDist) {
 
 export class Game {
   /** @param hiderPlayers 隐藏者描述数组：{ id, bot } */
-  /** @param opts.debugMode 单机调试：搜寻者工具无 CD、误标记不锁技能 */
+  /** @param opts.debugMode 单机调试：搜寻者工具无 CD（标记冷却仍生效） */
   constructor(hiderPlayers, opts = {}) {
     this.now = 0;
     this.timeLeft = CONFIG.MATCH_DURATION;
@@ -42,7 +42,7 @@ export class Game {
     this.toolCooldownUntil = Object.fromEntries(
       Object.keys(CONFIG.TOOLS).map((k) => [k, 0]),
     );
-    this.lockUntil = 0;
+    this.markCooldownUntil = 0;
     this.frozenUntil = 0;
     this.effects = {};
     this.bait = null;
@@ -150,7 +150,7 @@ export class Game {
   }
 
   markAnt(antId) {
-    if (this.over || (!this.debugMode && this.now < this.lockUntil)) return;
+    if (this.over || this.now < this.markCooldownUntil) return;
     const ant = this.ants.find(a => a.id === antId);
     if (!ant || ant.marked) return;
     if (ant.isHider) {
@@ -164,9 +164,17 @@ export class Game {
       this.events.push({ t: 'mark_hit', x: ant.x, y: ant.y });
       this._checkWin();
     } else {
-      if (!this.debugMode) this.lockUntil = this.now + CONFIG.MISMARK_PENALTY;
+      // 误标 AI：触发逃窜态短暂打乱画面，并进入标记冷却
+      triggerFlee(ant, CONFIG.MISMARK_FLEE_DURATION, { x: ant.x, y: ant.y });
+      const { min, max } = CONFIG.MARK_COOLDOWN;
+      this.markCooldownUntil = this.now + rand(min, max);
       this.events.push({ t: 'mark_miss', x: ant.x, y: ant.y, antId });
     }
+  }
+
+  /** 标记功能剩余冷却 (秒) */
+  _markCdLeft() {
+    return Math.max(0, +(this.markCooldownUntil - this.now).toFixed(1));
   }
 
   /** 某工具剩余冷却 (秒) */
@@ -175,10 +183,9 @@ export class Game {
     return Math.max(0, +(this.toolCooldownUntil[tool] - this.now).toFixed(1));
   }
 
-  /** 工具是否可用（未在独立 CD 中且未被误标记锁死） */
+  /** 工具是否可用（未在独立 CD 中） */
   _canUseTool(tool) {
     if (this.debugMode) return true;
-    if (this.now < this.lockUntil) return false;
     return this.now >= (this.toolCooldownUntil[tool] ?? 0);
   }
 
@@ -459,7 +466,7 @@ export class Game {
       toolCooldownLeft: Object.fromEntries(
         Object.keys(CONFIG.TOOLS).map((k) => [k, this._toolCdLeft(k)]),
       ),
-      lockLeft: this.debugMode ? 0 : Math.max(0, +(this.lockUntil - this.now).toFixed(1)),
+      markCdLeft: this._markCdLeft(),
       debugMode: this.debugMode,
       frozen: this.frozenUntil > this.now,
       lightBeam: this.lightBeam && this.now < this.lightBeam.until

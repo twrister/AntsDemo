@@ -171,6 +171,8 @@ html, body {
 /* 游戏 */
 #canvas { display: block; width: 100vw; height: 100vh; background: var(--soil); cursor: grab; }
 #canvas.dragging { cursor: grabbing; }
+#canvas.mark-cooldown { cursor: not-allowed; }
+#canvas.mark-cooldown.dragging { cursor: grabbing; }
 
 .hud {
   position: absolute; top: 16px; left: 50%; transform: translateX(-50%);

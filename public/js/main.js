@@ -382,11 +382,11 @@ net.on('start', (m) => {
   $('roleTag').className = 'hud-item ' + (role === ROLE.SEEKER ? 'role-seeker' : 'role-hider');
   if (role === ROLE.SEEKER) {
     controller = new SeekerController({ canvas, input, net, world });
-    $('scoreTag').classList.remove('hidden');
   } else {
     controller = new HiderController({ canvas, input, net, world, antId: m.antId });
     $('toolbar').classList.add('hidden');
   }
+  $('hiderScorePanel').classList.remove('hidden');
   running = true;
   sendDevConfig();
   requestAnimationFrame(loop);
@@ -403,7 +403,7 @@ net.on('end', (m) => {
   $('endTitle').textContent = won ? '胜利！' : '失败';
   $('endTitle').style.color = won ? 'var(--hider)' : 'var(--danger)';
   $('endReason').textContent = m.reason;
-  $('endScore').textContent = `食物进度：${m.score} / ${m.quota}`;
+  $('endScore').textContent = formatHiderScoresText(m.hiderScores, m.hiderQuota);
   showScreen('end');
 });
 
@@ -426,9 +426,33 @@ function loop(now) {
 function updateHud(snap) {
   const m = Math.floor(snap.timeLeft / 60), s = snap.timeLeft % 60;
   $('timer').textContent = `${m}:${String(s).padStart(2, '0')}`;
-  if (role === ROLE.SEEKER) $('scoreTag').textContent = `已逃逸食物 ${snap.score}/${snap.quota}`;
-  else $('scoreTag').textContent = `食物 ${snap.score}/${snap.quota}`;
+  updateHiderScorePanel(snap);
   updateDevAntStats(snap);
+}
+
+/** 渲染左上角各隐藏者获证进度 */
+function updateHiderScorePanel(snap) {
+  const panel = $('hiderScorePanel');
+  if (!panel || !snap?.hiderScores?.length) {
+    if (panel) panel.innerHTML = '';
+    return;
+  }
+  const quota = snap.hiderQuota ?? snap.hiderScores[0]?.quota ?? 0;
+  let html = `<div class="panel-title">隐藏者获证 ${quota > 0 ? `(目标 ${quota})` : ''}</div>`;
+  for (const h of snap.hiderScores) {
+    const cls = h.verified ? 'hider-score-row verified' : 'hider-score-row';
+    html += `<div class="${cls}"><span class="label">${escapeHtml(h.label)}</span><span class="progress">${h.score}/${h.quota}</span></div>`;
+  }
+  panel.innerHTML = html;
+}
+
+/** 结算页获证进度文案 */
+function formatHiderScoresText(scores, quota) {
+  if (!scores?.length) return '无获证数据';
+  return scores.map(h => {
+    const tag = h.verified ? '已获证' : '未获证';
+    return `${h.label}：${h.score}/${h.quota ?? quota}（${tag}）`;
+  }).join(' · ');
 }
 
 function updateDevAntStats(snap) {
@@ -460,7 +484,14 @@ function handleEvent(e) {
       controller?.onMarkMiss?.();
       break;
     case 'food_pickup': if (role === ROLE.HIDER) toast('拿到食物，送回巢穴', 'good'); break;
-    case 'score':      toast(`食物已送达 (${e.score})`, 'good'); break;
+    case 'score':
+      if (role === ROLE.HIDER && e.playerId === myPlayerId) toast(`食物已送达 (${e.score})`, 'good');
+      break;
+    case 'hider_verified':
+      toast(role === ROLE.SEEKER
+        ? `${e.label || '隐藏者'} 已获证，外观现出真色且不可标记`
+        : `${e.label || '隐藏者'} 已获证！`, 'good');
+      break;
     case 'tool':       if (role === ROLE.SEEKER) toast('使用了工具', ''); break;
   }
 }
@@ -500,6 +531,8 @@ function resetGameUi() {
   $('toolbar').classList.add('hidden');
   $('seekerHint').classList.add('hidden');
   $('hiderHint').classList.add('hidden');
+  $('hiderScorePanel').classList.add('hidden');
+  $('hiderScorePanel').innerHTML = '';
   updateDevAntStats(null);
 }
 

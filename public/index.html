@@ -76,11 +76,13 @@
   <div id="game" class="screen hidden">
     <canvas id="canvas"></canvas>
 
+    <!-- 左上角：各隐藏者获证进度（全员可见） -->
+    <div id="hiderScorePanel" class="hider-score-panel hidden"></div>
+
     <!-- 顶部信息条 -->
     <div id="hud" class="hud">
       <div class="hud-item" id="timer">10:00</div>
       <div class="hud-item" id="roleTag"></div>
-      <div class="hud-item" id="scoreTag"></div>
       <button id="pheroToggleBtn" class="hud-item hud-btn phero-on" title="切换信息素可视化">信息素</button>
     </div>
 

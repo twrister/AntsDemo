@@ -10,8 +10,10 @@ export const CONFIG = {
   MATCH_DURATION: 600,      // 单局时长 (秒)，基准 600
   AI_ANT_COUNT: 30,         // 地图 AI 蚂蚁数量
   MIN_HIDERS: 1,            // 最少隐藏者(不足用 AI 占位)
-  // 食物配额目标公式：目标 = 2 + 隐藏者人数
+  // 团队食物总量公式（用于均分获证目标）：总量 = 2 + 隐藏者人数
   foodQuota: (hiderCount) => 2 + hiderCount,
+  /** 每位隐藏者获证所需食物份数（由团队总量均分后向上取整） */
+  hiderFoodQuota: (hiderCount) => Math.max(1, Math.ceil((2 + hiderCount) / hiderCount)),
 
   FOOD_ACTION_TIME: 1,          // 取食物 / 放食物等待时间 (秒)
 

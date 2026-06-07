@@ -181,7 +181,7 @@ export class SeekerController {
     if (!this.lastSnap) return null;
     let best = null, bd = 18 * 18;
     for (const a of this.lastSnap.ants) {
-      if (a.marked) continue;
+      if (a.marked || a.verified) continue;
       const dx = a.x - x, dy = a.y - y, d = dx * dx + dy * dy;
       if (d < bd) { bd = d; best = a; }
     }

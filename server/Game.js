@@ -55,8 +55,8 @@ export class Game {
     this._lastSniffBeamUntil = 0;
 
     this.hiderCount = hiderPlayers.length;
-    this.quota = CONFIG.foodQuota(this.hiderCount);
-    this.score = 0;
+    this.hiderQuota = CONFIG.hiderFoodQuota(this.hiderCount);
+    this._botLabelSeq = 0;
     this.over = false;
     this.winner = null;
     this.reason = '';
@@ -83,8 +83,12 @@ export class Game {
       const { traits, devDim } = deriveHiderTraits(host.traits);
       const ant = this._makeAnt(this._nextAntId++, true, h.id);
       ant.traits = traits;
+      ant.hostTraits = { ...host.traits };
       ant.devDim = devDim;
       ant.bot = !!h.bot;
+      ant.hiderLabel = h.name || (h.bot ? `AI-${++this._botLabelSeq}` : '隐藏者');
+      ant.foodScore = 0;
+      ant.verified = false;
       if (ant.bot) initAI(ant);
       this.ants.push(ant);
     }
@@ -210,6 +214,8 @@ export class Game {
     if (this.over || this.now < this.markCooldownUntil) return;
     const ant = this.ants.find(a => a.id === antId);
     if (!ant || this._isMarked(ant)) return;
+    // 已获证的隐藏者不可再被标记
+    if (ant.isHider && ant.verified) return;
     if (ant.isHider) {
       ant.markedUntil = this.now + CONFIG.HIDER_MARK_DURATION;
       ant.vx = ant.vy = 0;
@@ -400,12 +406,12 @@ export class Game {
     if (ant.state !== undefined) ant.state = 'searching';
     this.phero.deposit(deposit.x, deposit.y, 1, CONFIG.PHEROMONE.FIELD_MAX * 0.5);
     if (ant.isHider) {
-      this.score++;
-      this.events.push({ t: 'score', score: this.score });
-      if (this.score >= this.quota && !this.over) {
-        this.over = true;
-        this.winner = ROLE.HIDER;
-        this.reason = '蚂蚁们达成了食物额度！';
+      ant.foodScore++;
+      this.events.push({ t: 'score', antId: ant.id, playerId: ant.playerId, score: ant.foodScore, label: ant.hiderLabel });
+      if (!ant.verified && ant.foodScore >= this.hiderQuota) {
+        ant.verified = true;
+        this.events.push({ t: 'hider_verified', antId: ant.id, label: ant.hiderLabel });
+        this._checkHiderWin();
       }
     }
     return false;
@@ -535,6 +541,30 @@ export class Game {
     }
   }
 
+  /** 所有在场隐藏者均已获证 → 隐藏者阵营胜利 */
+  _checkHiderWin() {
+    if (this.over) return;
+    const active = this.ants.filter(a => this._isActiveHider(a));
+    if (active.length > 0 && active.every(a => a.verified)) {
+      this.over = true;
+      this.winner = ROLE.HIDER;
+      this.reason = '所有隐藏者均已获证！';
+    }
+  }
+
+  /** 每位隐藏者的获证进度（供 HUD 展示） */
+  _hiderScoreList() {
+    return this.ants
+      .filter(a => a.isHider)
+      .map(a => ({
+        antId: a.id,
+        label: a.hiderLabel,
+        score: a.foodScore,
+        quota: this.hiderQuota,
+        verified: a.verified,
+      }));
+  }
+
   // ---------- 快照 ----------
   snapshot(role, viewerPid) {
     const deposit = this._depositPoint();
@@ -542,12 +572,17 @@ export class Game {
       ? this.ants.filter(a => !this._isInsideNest(a))
       : this.ants;
     const ants = visibleAnts.map(a => {
+      // 搜寻者视角：已获证隐藏者显示宿主真实外观
+      const traits = (role === ROLE.SEEKER && a.isHider && a.verified && a.hostTraits)
+        ? a.hostTraits
+        : a.traits;
       return {
         id: a.id,
         x: Math.round(a.x), y: Math.round(a.y),
         angle: +a.angle.toFixed(2),
-        traits: a.traits,
+        traits,
         marked: this._isMarked(a),
+        verified: !!a.verified,
         carrying: a.carrying,
         suspicious: this.now < a.suspicious,
         isSelf: role === ROLE.HIDER && a.playerId === viewerPid,
@@ -599,8 +634,8 @@ export class Game {
         }),
       },
       bait: this.bait && this.now < this.bait.until ? { x: this.bait.x, y: this.bait.y } : null,
-      score: this.score,
-      quota: this.quota,
+      hiderScores: this._hiderScoreList(),
+      hiderQuota: this.hiderQuota,
       phero: pheroSnap,  // null 时客户端复用上一帧缓存
       toolCooldownLeft: Object.fromEntries(
         Object.keys(CONFIG.TOOLS).map((k) => [k, this._toolCdLeft(k)]),

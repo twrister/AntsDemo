@@ -144,7 +144,7 @@ export class Room {
     const cs = this.canStart();
     if (!cs.ok) return;
 
-    let hiders = this.hiders.map(p => ({ id: p.id, bot: false }));
+    let hiders = this.hiders.map(p => ({ id: p.id, bot: false, name: p.name }));
     let botIdx = 0;
     while (hiders.length < CONFIG.MIN_HIDERS) hiders.push({ id: `bot_${botIdx++}`, bot: true });
     this._beginPlaying(hiders);
@@ -166,7 +166,7 @@ export class Room {
       hiders = [];
       while (hiders.length < Math.max(CONFIG.MIN_HIDERS, 2)) hiders.push({ id: `bot_${botIdx++}`, bot: true });
     } else {
-      hiders = [{ id: p.id, bot: false }];
+      hiders = [{ id: p.id, bot: false, name: p.name }];
       while (hiders.length < CONFIG.MIN_HIDERS) hiders.push({ id: `bot_${botIdx++}`, bot: true });
     }
     this._beginPlaying(hiders, { debugMode: true });
@@ -224,7 +224,13 @@ export class Room {
   endGame(winner, reason) {
     if (this.loop) { clearInterval(this.loop); this.loop = null; }
     this.state = 'ended';
-    this.broadcast({ type: S2C.END, winner, reason, score: this.game ? this.game.score : 0, quota: this.game ? this.game.quota : 0 });
+    this.broadcast({
+      type: S2C.END,
+      winner,
+      reason,
+      hiderScores: this.game ? this.game._hiderScoreList() : [],
+      hiderQuota: this.game ? this.game.hiderQuota : 0,
+    });
     this.onChange?.();
   }
 

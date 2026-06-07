@@ -380,7 +380,17 @@ export class Renderer {
       ctx.fillStyle = '#d6543c'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center';
       ctx.fillText('?', ant.x, ant.y - 20);
     }
-    // 被标记淘汰
+    // 已获证：搜寻者可见真实外观，加金色标识
+    if (ant.verified && opts.role === ROLE.SEEKER) {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(224,169,59,0.85)';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(ant.x, ant.y, 16, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+    }
+    // 被标记冻结
     if (ant.marked) {
       ctx.strokeStyle = '#d6543c'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(ant.x - 8, ant.y - 8); ctx.lineTo(ant.x + 8, ant.y + 8);

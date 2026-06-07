@@ -219,8 +219,8 @@ export class SeekerController {
     }
     if (blocked) {
       this.armedTool = null;
-      this.beamActive = false;
-      this._localBeam = null;
+      // 照射进行中不因全局 CD 中断（CD 在光束开始时已触发，仅阻止新工具）
+      if (!this.beamActive) this._localBeam = null;
       this._refreshArmed();
     }
 

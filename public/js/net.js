@@ -60,19 +60,31 @@ export class Net {
         angle: a0.angle + angleDiff(a0.angle, a1.angle) * f,
       };
     });
-    let lightBeam = null;
-    if (s0.lightBeam && s1.lightBeam) {
-      lightBeam = {
-        x: s0.lightBeam.x + (s1.lightBeam.x - s0.lightBeam.x) * f,
-        y: s0.lightBeam.y + (s1.lightBeam.y - s0.lightBeam.y) * f,
-        targetX: (s0.lightBeam.targetX ?? s0.lightBeam.x) + ((s1.lightBeam.targetX ?? s1.lightBeam.x) - (s0.lightBeam.targetX ?? s0.lightBeam.x)) * f,
-        targetY: (s0.lightBeam.targetY ?? s0.lightBeam.y) + ((s1.lightBeam.targetY ?? s1.lightBeam.y) - (s0.lightBeam.targetY ?? s0.lightBeam.y)) * f,
-        radius: s1.lightBeam.radius,
+    const lightBeam = this._lerpBeam(s0.lightBeam, s1.lightBeam, f);
+    const sniffBeam = this._lerpSniffBeam(s0.sniffBeam, s1.sniffBeam, f);
+    return { ...s1, ants, lightBeam, sniffBeam };
+  }
+
+  /** 插值光束位置（强光照射 / 嗅探圈） */
+  _lerpBeam(b0, b1, f) {
+    if (b0 && b1) {
+      return {
+        x: b0.x + (b1.x - b0.x) * f,
+        y: b0.y + (b1.y - b0.y) * f,
+        targetX: (b0.targetX ?? b0.x) + ((b1.targetX ?? b1.x) - (b0.targetX ?? b0.x)) * f,
+        targetY: (b0.targetY ?? b0.y) + ((b1.targetY ?? b1.y) - (b0.targetY ?? b0.y)) * f,
+        radius: b1.radius,
       };
-    } else if (s1.lightBeam) {
-      lightBeam = s1.lightBeam;
     }
-    return { ...s1, ants, lightBeam };
+    return b1 || null;
+  }
+
+  /** 插值嗅探圈位置，警告状态取最新帧 */
+  _lerpSniffBeam(b0, b1, f) {
+    const beam = this._lerpBeam(b0, b1, f);
+    if (!beam) return null;
+    // 相邻快照任一为 true 即保持红色，避免插值帧闪烁
+    return { ...beam, hiderDetected: !!(b0?.hiderDetected || b1?.hiderDetected) };
   }
 }
 

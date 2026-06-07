@@ -20,7 +20,7 @@ export class Renderer {
    * 渲染一帧。
    * @param snap 插值后的世界快照
    * @param cam  镜头 { x, y, zoom } —— 世界坐标中心点
-   * @param opts { role, world, time, viewRadius, frozen, lightBeam }
+   * @param opts { role, world, time, viewRadius, frozen, lightBeam, sniffBeam }
    */
   draw(snap, cam, opts) {
     const ctx = this.ctx;
@@ -44,6 +44,7 @@ export class Renderer {
     this._drawNormalFood(ctx, snap.normalFood);
     if (snap.bait) this._drawBait(ctx, snap.bait, opts.time);
     if (opts.lightBeam) this._drawLightBeam(ctx, opts.lightBeam, opts.time);
+    if (opts.sniffBeam) this._drawSniffBeam(ctx, opts.sniffBeam, opts.time);
 
     for (const ant of snap.ants) {
       this._drawAnt(ctx, ant, opts);
@@ -170,6 +171,40 @@ export class Renderer {
     ctx.strokeStyle = `rgba(224,169,59,${0.2 + pulse * 0.3})`; ctx.lineWidth = 2; ctx.stroke();
     ctx.beginPath(); ctx.arc(bait.x, bait.y, 6, 0, Math.PI * 2);
     ctx.fillStyle = '#e0a93b'; ctx.fill();
+  }
+
+  /** 绘制气息嗅探圈：发现目标时变为红色警告色 */
+  _drawSniffBeam(ctx, beam, time) {
+    const warn = !!beam.hiderDetected;
+    const pulse = warn
+      ? 0.7 + 0.3 * Math.sin(time / 60)
+      : 0.85 + 0.15 * Math.sin(time / 120);
+    const r = beam.radius || 100;
+    const grad = ctx.createRadialGradient(beam.x, beam.y, r * 0.2, beam.x, beam.y, r);
+    if (warn) {
+      grad.addColorStop(0, `rgba(255,90,60,${(0.35 * pulse).toFixed(3)})`);
+      grad.addColorStop(0.5, `rgba(255,50,40,${(0.18 * pulse).toFixed(3)})`);
+      grad.addColorStop(1, 'rgba(255,40,30,0)');
+    } else {
+      grad.addColorStop(0, `rgba(80,200,220,${(0.22 * pulse).toFixed(3)})`);
+      grad.addColorStop(0.5, `rgba(60,170,200,${(0.1 * pulse).toFixed(3)})`);
+      grad.addColorStop(1, 'rgba(40,150,180,0)');
+    }
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(beam.x, beam.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(beam.x, beam.y, r, 0, Math.PI * 2);
+    ctx.strokeStyle = warn
+      ? `rgba(255,80,50,${(0.65 * pulse).toFixed(3)})`
+      : `rgba(100,210,230,${(0.4 * pulse).toFixed(3)})`;
+    ctx.lineWidth = warn ? 3 : 2;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(beam.x, beam.y, 6, 0, Math.PI * 2);
+    ctx.fillStyle = warn ? `rgba(255,120,80,${pulse.toFixed(3)})` : `rgba(120,220,240,${pulse.toFixed(3)})`;
+    ctx.fill();
   }
 
   /** 绘制强光照射：鼠标位置的径向光晕 */

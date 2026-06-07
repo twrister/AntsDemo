@@ -39,6 +39,7 @@ const DEV_DEFAULTS = {
   FOOD_COUNT: 5,
   FOOD_CAPACITY: 60,
   BEAM_SPEED: 280,
+  SNIFF_RADIUS: 100,
 };
 
 const DEV_STORAGE_KEY = 'antsDemo_devCfg';
@@ -57,12 +58,19 @@ function persistDevConfig() {
     FOOD_COUNT: parseInt($('devFoodCount').value, 10),
     FOOD_CAPACITY: parseInt($('devFoodCapacity').value, 10),
     BEAM_SPEED: parseInt($('devBeamSpeed').value, 10),
+    SNIFF_RADIUS: parseInt($('devSniffRadius').value, 10),
   };
   localStorage.setItem(DEV_STORAGE_KEY, JSON.stringify(cfg));
 }
 
 function applyBeamSpeedToWorld(beamSpeed) {
   if (world?.tools?.panic) world.tools.panic.beamSpeed = beamSpeed;
+  if (world?.tools?.sniff) world.tools.sniff.beamSpeed = beamSpeed;
+}
+
+/** 将嗅探圈半径同步到客户端 world 配置 */
+function applySniffRadiusToWorld(radius) {
+  if (world?.tools?.sniff) world.tools.sniff.radius = radius;
 }
 
 function restoreDevConfig() {
@@ -92,7 +100,10 @@ function restoreDevConfig() {
   $('devFoodCapacityVal').textContent = c.FOOD_CAPACITY;
   $('devBeamSpeed').value = c.BEAM_SPEED;
   $('devBeamSpeedVal').textContent = c.BEAM_SPEED;
+  $('devSniffRadius').value = c.SNIFF_RADIUS;
+  $('devSniffRadiusVal').textContent = c.SNIFF_RADIUS;
   applyBeamSpeedToWorld(c.BEAM_SPEED);
+  applySniffRadiusToWorld(c.SNIFF_RADIUS);
 }
 
 restoreDevConfig();
@@ -113,8 +124,10 @@ function sendDevConfig() {
     FOOD_COUNT: parseInt($('devFoodCount').value, 10),
     FOOD_CAPACITY: parseInt($('devFoodCapacity').value, 10),
     BEAM_SPEED: parseInt($('devBeamSpeed').value, 10),
+    SNIFF_RADIUS: parseInt($('devSniffRadius').value, 10),
   });
   applyBeamSpeedToWorld(parseInt($('devBeamSpeed').value, 10));
+  applySniffRadiusToWorld(parseInt($('devSniffRadius').value, 10));
 }
 
 function bindSlider(id, valId, decimals) {
@@ -140,6 +153,7 @@ if (DEBUG_MODE) {
   bindSlider('devFoodCount', 'devFoodCountVal', 0);
   bindSlider('devFoodCapacity', 'devFoodCapacityVal', 0);
   bindSlider('devBeamSpeed', 'devBeamSpeedVal', 0);
+  bindSlider('devSniffRadius', 'devSniffRadiusVal', 0);
 
   $('devReset').addEventListener('click', () => {
     localStorage.removeItem(DEV_STORAGE_KEY);
@@ -161,6 +175,8 @@ if (DEBUG_MODE) {
     $('devFoodCapacityVal').textContent = DEV_DEFAULTS.FOOD_CAPACITY;
     $('devBeamSpeed').value = DEV_DEFAULTS.BEAM_SPEED;
     $('devBeamSpeedVal').textContent = DEV_DEFAULTS.BEAM_SPEED;
+    $('devSniffRadius').value = DEV_DEFAULTS.SNIFF_RADIUS;
+    $('devSniffRadiusVal').textContent = DEV_DEFAULTS.SNIFF_RADIUS;
     sendDevConfig();
   });
 

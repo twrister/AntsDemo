@@ -2,7 +2,7 @@
 import { computeFitZoom } from './const.js';
 
 const GLOBAL_TOOLS = ['freeze'];  // 立即生效(全局)
-const BEAM_TOOLS = ['panic'];   // 点击左键开始，自动持续照射
+const BEAM_TOOLS = ['panic', 'sniff']; // 点击左键开始，自动持续照射
 
 export class SeekerController {
   constructor({ canvas, input, net, world }) {
@@ -19,6 +19,7 @@ export class SeekerController {
     this._localMarkCdUntil = 0; // 误标后本地预判冷却，弥补快照延迟
 
     this.beamActive = false;
+    this.beamTool = null;        // 当前照射中的光束工具：panic / sniff
     this._localBeam = null;
     this._beamSendTimer = 0;
     this._beamConfirmed = false; // 服务器已确认光束，避免首帧误判结束
@@ -82,7 +83,7 @@ export class SeekerController {
       const wp = this.screenToWorld(m.x, m.y);
       if (this.armedTool) {
         if (BEAM_TOOLS.includes(this.armedTool)) {
-          this._startBeam(wp);
+          this._startBeam(wp, this.armedTool);
           return;
         }
         this.net.send({ type: 'use_tool', tool: this.armedTool, x: wp.x, y: wp.y });
@@ -97,9 +98,9 @@ export class SeekerController {
     });
   }
 
-  /** 强光光束向目标点限速移动（像素/秒） */
+  /** 光束向目标点限速移动（像素/秒） */
   _moveBeamToward(target, dt) {
-    const speed = this.world.tools.panic.beamSpeed ?? 280;
+    const speed = this.world.tools[this.beamTool]?.beamSpeed ?? 280;
     const maxMove = speed * dt;
     const dx = target.x - this._localBeam.x;
     const dy = target.y - this._localBeam.y;
@@ -140,17 +141,23 @@ export class SeekerController {
     this._localMarkCdUntil = Math.max(this._localMarkCdUntil, performance.now() + 5000);
   }
 
-  /** 强光照射：点击地图开始，自动持续至时长结束 */
-  _startBeam(wp) {
+  /** 持续照射类工具：点击地图开始，自动持续至时长结束 */
+  _startBeam(wp, tool) {
     if (this.beamActive) return;
-    if (this._isToolBlocked('panic')) return;
+    if (this._isToolBlocked(tool)) return;
     this.beamActive = true;
+    this.beamTool = tool;
     this._beamConfirmed = false;
     this._beamSendTimer = 0;
     this._localBeam = { x: wp.x, y: wp.y };
-    this.net.send({ type: 'tool_beam', tool: 'panic', x: wp.x, y: wp.y, active: true });
+    this.net.send({ type: 'tool_beam', tool, x: wp.x, y: wp.y, active: true });
     this.armedTool = null;
     this._refreshArmed();
+  }
+
+  /** 光束工具在快照中对应的字段名 */
+  _beamSnapKey(tool) {
+    return tool === 'sniff' ? 'sniffBeam' : 'lightBeam';
   }
 
   _setupHotkeys() {
@@ -225,13 +232,16 @@ export class SeekerController {
 
     // 照射中：限速跟随鼠标，限频 ~10Hz 同步服务器
     if (this.beamActive) {
+      const tool = this.beamTool;
+      const snapKey = this._beamSnapKey(tool);
       const target = this.screenToWorld(this.input.mouse.x, this.input.mouse.y);
       this._moveBeamToward(target, dt);
-      if (snap.lightBeam) this._beamConfirmed = true;
+      if (snap[snapKey]) this._beamConfirmed = true;
       // 先检测结束再同步，避免到期帧仍发送 active:true 导致服务器误重启
-      if (this._beamConfirmed && !snap.lightBeam) {
-        this.net.send({ type: 'tool_beam', tool: 'panic', x: target.x, y: target.y, active: false });
+      if (this._beamConfirmed && !snap[snapKey]) {
+        this.net.send({ type: 'tool_beam', tool, x: target.x, y: target.y, active: false });
         this.beamActive = false;
+        this.beamTool = null;
         this._localBeam = null;
         this._beamConfirmed = false;
         this.armedTool = null;
@@ -239,7 +249,7 @@ export class SeekerController {
       } else {
         this._beamSendTimer -= dt;
         if (this._beamSendTimer <= 0) {
-          this.net.send({ type: 'tool_beam', tool: 'panic', x: target.x, y: target.y, active: true });
+          this.net.send({ type: 'tool_beam', tool, x: target.x, y: target.y, active: true });
           this._beamSendTimer = 0.1;
         }
       }
@@ -262,10 +272,17 @@ export class SeekerController {
       this._refreshArmed();
     }
 
-    const panicDef = this.world.tools.panic;
-    const lightBeam = this.beamActive && this._localBeam
-      ? { x: this._localBeam.x, y: this._localBeam.y, radius: panicDef.radius || 120 }
+    const toolDef = this.beamActive ? this.world.tools[this.beamTool] : null;
+    const localBeam = this.beamActive && this._localBeam && toolDef
+      ? { x: this._localBeam.x, y: this._localBeam.y, radius: toolDef.radius }
+      : null;
+
+    const lightBeam = this.beamActive && this.beamTool === 'panic'
+      ? localBeam
       : snap.lightBeam;
+    const sniffBeam = this.beamActive && this.beamTool === 'sniff'
+      ? { ...localBeam, hiderDetected: !!snap.sniffBeam?.hiderDetected }
+      : snap.sniffBeam;
 
     const viewRadius = Math.min(this.canvas.width, this.canvas.height) * this.world.viewRatio;
     return {
@@ -273,6 +290,7 @@ export class SeekerController {
       viewRadius,
       frozen: snap.frozen,
       lightBeam,
+      sniffBeam,
     };
   }
 }

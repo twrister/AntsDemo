@@ -48,6 +48,8 @@ export class Game {
     this.bait = null;
     this.lightBeam = null; // 强光照射：{ x, y, until }
     this._lastLightBeamUntil = 0; // 上次光束自然结束时刻，用于忽略过期后的残留 active:true
+    this.sniffBeam = null; // 气息嗅探：{ x, y, until, hiderDetected }
+    this._lastSniffBeamUntil = 0;
 
     this.hiderCount = hiderPlayers.length;
     this.quota = CONFIG.foodQuota(this.hiderCount);
@@ -92,9 +94,14 @@ export class Game {
     return this.devCfg.FOOD_CAPACITY ?? CONFIG.FOOD.capacity;
   }
 
-  /** 强光光束跟随速度（像素/秒，开发者工具可热改） */
+  /** 强光/嗅探光束跟随速度（像素/秒，开发者工具可热改） */
   _beamSpeed() {
     return this.devCfg.BEAM_SPEED ?? CONFIG.TOOLS.panic.beamSpeed ?? 280;
+  }
+
+  /** 嗅探圈半径（像素，开发者工具可热改） */
+  _sniffRadius() {
+    return this.devCfg.SNIFF_RADIUS ?? CONFIG.TOOLS.sniff.radius ?? 100;
   }
 
   /** 在地图上随机生成 n 个食物堆，保证距巢至少 200px */
@@ -207,43 +214,77 @@ export class Game {
     this.events.push({ t: 'tool', tool, x, y });
   }
 
+  /** 持续照射类工具配置：强光照射 / 气息嗅探 */
+  static BEAM_TOOLS = {
+    panic: { field: 'lightBeam', lastUntil: '_lastLightBeamUntil' },
+    sniff: { field: 'sniffBeam', lastUntil: '_lastSniffBeamUntil' },
+  };
+
   /**
-   * 持续照射类工具（强光照射）：点击开始后更新光束位置，自动持续至时长结束。
+   * 持续照射类工具：点击开始后更新光束位置，自动持续至时长结束。
    */
   setToolBeam(tool, x, y, active) {
-    if (this.over || tool !== 'panic') return;
-    const def = CONFIG.TOOLS.panic;
+    const cfg = Game.BEAM_TOOLS[tool];
+    if (this.over || !cfg) return;
+    const def = CONFIG.TOOLS[tool];
+    const field = cfg.field;
 
     if (active) {
-      if (!this.lightBeam) {
+      if (!this[field]) {
         // 光束刚结束后的残留 active:true 不应重启（调试模式无 CD 时尤甚）
-        if (this._lastLightBeamUntil > 0 && this.now < this._lastLightBeamUntil + 0.3) return;
+        const lastUntil = this[cfg.lastUntil];
+        if (lastUntil > 0 && this.now < lastUntil + 0.3) return;
         if (!this._canUseTool(tool)) return;
         if (!this.debugMode) this.toolCooldownUntil[tool] = this.now + def.cd;
-        this.lightBeam = { x, y, targetX: x, targetY: y, until: this.now + def.duration };
+        this[field] = { x, y, targetX: x, targetY: y, until: this.now + def.duration };
         this.events.push({ t: 'tool', tool, x, y });
       } else {
-        this.lightBeam.targetX = x;
-        this.lightBeam.targetY = y;
+        this[field].targetX = x;
+        this[field].targetY = y;
       }
     } else {
-      this.lightBeam = null;
+      this[field] = null;
     }
   }
 
-  /** 强光光束限速移向客户端上报的目标点 */
-  _updateLightBeam(dt) {
-    if (!this.lightBeam || this.now >= this.lightBeam.until) {
-      if (this.lightBeam) this._lastLightBeamUntil = this.lightBeam.until;
-      this.lightBeam = null;
+  /** 光束限速移向客户端上报的目标点 */
+  _updateBeam(beamKey, lastUntilKey, dt) {
+    const beam = this[beamKey];
+    if (!beam || this.now >= beam.until) {
+      if (beam) this[lastUntilKey] = beam.until;
+      this[beamKey] = null;
       return;
     }
-    const speed = this._beamSpeed();
     moveToward(
-      this.lightBeam,
-      { x: this.lightBeam.targetX, y: this.lightBeam.targetY },
-      speed * dt,
+      beam,
+      { x: beam.targetX, y: beam.targetY },
+      this._beamSpeed() * dt,
     );
+  }
+
+  /** 嗅探圈内检测未标记隐藏者；发现后进入冷却，冷却结束前不再触发 */
+  _applySniffDetect() {
+    const beam = this.sniffBeam;
+    if (!beam) return;
+    // 提示色短暂保持，本次嗅探已触发过则不再重复
+    if (beam.warnUntil && this.now < beam.warnUntil) {
+      beam.hiderDetected = true;
+      return;
+    }
+    beam.hiderDetected = false;
+    if (beam.detectLockUntil && this.now < beam.detectLockUntil) return;
+
+    const r2 = this._sniffRadius() ** 2;
+    const src = { x: beam.x, y: beam.y };
+    for (const a of this.ants) {
+      if (a.isHider && !a.marked && dist2(a, src) < r2) {
+        beam.hiderDetected = true;
+        beam.warnUntil = this.now + 0.4;
+        // 本次嗅探仅触发一次，直至光束结束
+        beam.detectLockUntil = beam.until;
+        return;
+      }
+    }
   }
 
   /** 强光范围内触发 AI 蚂蚁逃离光源 */
@@ -338,8 +379,10 @@ export class Game {
 
     // 信息素蒸发（负反馈，每帧执行）
     this.phero.evaporate(dt);
-    this._updateLightBeam(dt);
+    this._updateBeam('lightBeam', '_lastLightBeamUntil', dt);
+    this._updateBeam('sniffBeam', '_lastSniffBeamUntil', dt);
     this._applyLightPanic();
+    this._applySniffDetect();
 
     // 食物堆重生检查
     for (const s of this.foodSources) {
@@ -478,6 +521,16 @@ export class Game {
             radius: CONFIG.TOOLS.panic.radius,
           }
         : null,
+      sniffBeam: this.sniffBeam && this.now < this.sniffBeam.until
+        ? {
+            x: this.sniffBeam.x,
+            y: this.sniffBeam.y,
+            targetX: this.sniffBeam.targetX,
+            targetY: this.sniffBeam.targetY,
+            radius: this._sniffRadius(),
+            hiderDetected: !!this.sniffBeam.hiderDetected,
+          }
+        : null,
     };
   }
 
@@ -513,7 +566,7 @@ export class Game {
   /**
    * 更新开发者调试参数（运行时热修改 AI 行为，不重启对局）。
    * 所有参数下一帧即生效（speed/turn 逐帧读取；ant count 立即增删蚂蚁）。
-   * 支持字段：AI_SPEED_BASE / AI_TURN_SMOOTH / AI_SOCIAL_CHANCE / AI_SPEED / AI_ANT_COUNT / FOOD_COUNT / FOOD_CAPACITY / BEAM_SPEED
+   * 支持字段：AI_SPEED_BASE / AI_TURN_SMOOTH / AI_SOCIAL_CHANCE / AI_SPEED / AI_ANT_COUNT / FOOD_COUNT / FOOD_CAPACITY / BEAM_SPEED / SNIFF_RADIUS
    */
   setDevConfig(params) {
     if (params.AI_SPEED_BASE !== undefined) this.devCfg.AI_SPEED_BASE = +params.AI_SPEED_BASE;
@@ -533,6 +586,9 @@ export class Game {
     }
     if (params.BEAM_SPEED !== undefined) {
       this.devCfg.BEAM_SPEED = Math.max(50, Math.min(800, +params.BEAM_SPEED));
+    }
+    if (params.SNIFF_RADIUS !== undefined) {
+      this.devCfg.SNIFF_RADIUS = Math.max(50, Math.min(300, +params.SNIFF_RADIUS));
     }
   }
 

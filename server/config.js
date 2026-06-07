@@ -10,6 +10,9 @@ export const CONFIG = {
   MATCH_DURATION: 600,      // 单局时长 (秒)，基准 600
   AI_ANT_COUNT: 30,         // 地图 AI 蚂蚁数量
   MIN_HIDERS: 1,            // 最少隐藏者(不足用 AI 占位)
+  MAX_HIDERS: 4,            // 单局最多隐藏者人数
+  /** 隐藏者阵营标识色（按加入顺序分配，仅隐藏者方可见） */
+  HIDER_COLORS: ['#6fc36f', '#5eb8e8', '#e8a05e', '#c36fd4'],
   // 团队食物总量公式（用于均分获证目标）：总量 = 2 + 隐藏者人数
   foodQuota: (hiderCount) => 2 + hiderCount,
   /** 每位隐藏者获证所需食物份数（由团队总量均分后向上取整） */

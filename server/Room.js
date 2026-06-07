@@ -107,6 +107,7 @@ export class Room {
     const p = this.players.get(id);
     if (!p) return;
     if (role !== ROLE.SEEKER && role !== ROLE.HIDER) return;
+    if (role === ROLE.HIDER && p.role !== ROLE.HIDER && this.hiders.length >= CONFIG.MAX_HIDERS) return;
     p.role = role;
     p.ready = false; // 切换角色后重置准备
     this.broadcastLobby();
@@ -129,6 +130,7 @@ export class Room {
     const hiders = this.hiders;
     if (seekers.length !== 1) return { ok: false, reason: '需要恰好 1 名搜寻者' };
     if (hiders.length < 1) return { ok: false, reason: '至少需要 1 名隐藏者' };
+    if (hiders.length > CONFIG.MAX_HIDERS) return { ok: false, reason: `隐藏者最多 ${CONFIG.MAX_HIDERS} 人` };
     const notReady = [...this.players.values()].filter(p => !p.ready);
     if (notReady.length > 0) return { ok: false, reason: '还有玩家未准备' };
     return { ok: true, reason: '' };

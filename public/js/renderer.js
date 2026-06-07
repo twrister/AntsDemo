@@ -322,7 +322,8 @@ export class Renderer {
     const sat = Math.min(58, 45 + satBoost);
     let body = `hsl(${baseHue}, ${sat}%, ${light}%)`;
     if (ant.marked) body = illum > 0.2 ? '#777' : '#555';
-    if (ant.isSelf) body = '#6fc36f';
+    // 隐藏者方：己方与同队隐藏者显示标识色；搜寻者仅对已获证隐藏者显示真色
+    if (ant.hiderColor && (opts.role === ROLE.HIDER || ant.verified)) body = ant.hiderColor;
     // 腿
     const legLight = Math.max(12, light - 8 + illum * 6);
     ctx.strokeStyle = ant.marked ? '#444' : `hsl(${baseHue},${sat - 5}%,${legLight}%)`;
@@ -379,16 +380,6 @@ export class Renderer {
     if (ant.suspicious && opts.role === ROLE.SEEKER) {
       ctx.fillStyle = '#d6543c'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center';
       ctx.fillText('?', ant.x, ant.y - 20);
-    }
-    // 已获证：搜寻者可见真实外观，加金色标识
-    if (ant.verified && opts.role === ROLE.SEEKER) {
-      ctx.save();
-      ctx.strokeStyle = 'rgba(224,169,59,0.85)';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(ant.x, ant.y, 16, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.restore();
     }
     // 被标记冻结
     if (ant.marked) {

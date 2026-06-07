@@ -194,6 +194,10 @@ html, body {
   font-size: 14px; padding: 4px 0; gap: 10px;
 }
 .hider-score-row + .hider-score-row { border-top: 1px solid rgba(74,61,40,0.45); }
+.hider-color-dot {
+  flex-shrink: 0; width: 10px; height: 10px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.35);
+}
 .hider-score-row .label {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
 }

@@ -77,8 +77,9 @@ export class Game {
       this.ants.push(this._makeAnt(this._nextAntId++, false, null));
     }
 
-    // 隐藏者附身
-    for (const h of hiderPlayers) {
+    // 隐藏者附身（每人分配不同标识色，仅隐藏者方可见）
+    for (let i = 0; i < hiderPlayers.length; i++) {
+      const h = hiderPlayers[i];
       const host = this.ants[Math.floor(Math.random() * this.ants.length)];
       const { traits, devDim } = deriveHiderTraits(host.traits);
       const ant = this._makeAnt(this._nextAntId++, true, h.id);
@@ -86,6 +87,7 @@ export class Game {
       ant.hostTraits = { ...host.traits };
       ant.devDim = devDim;
       ant.bot = !!h.bot;
+      ant.hiderColor = CONFIG.HIDER_COLORS[i % CONFIG.HIDER_COLORS.length];
       ant.hiderLabel = h.name || (h.bot ? `AI-${++this._botLabelSeq}` : '隐藏者');
       ant.foodScore = 0;
       ant.verified = false;
@@ -559,6 +561,7 @@ export class Game {
       .map(a => ({
         antId: a.id,
         label: a.hiderLabel,
+        color: a.hiderColor,
         score: a.foodScore,
         quota: this.hiderQuota,
         verified: a.verified,
@@ -571,25 +574,21 @@ export class Game {
     const visibleAnts = role === ROLE.SEEKER
       ? this.ants.filter(a => !this._isInsideNest(a))
       : this.ants;
-    const ants = visibleAnts.map(a => {
-      // 搜寻者视角：已获证隐藏者显示宿主真实外观
-      const traits = (role === ROLE.SEEKER && a.isHider && a.verified && a.hostTraits)
-        ? a.hostTraits
-        : a.traits;
-      return {
+    const ants = visibleAnts.map(a => ({
         id: a.id,
         x: Math.round(a.x), y: Math.round(a.y),
         angle: +a.angle.toFixed(2),
-        traits,
+        traits: a.traits,
         marked: this._isMarked(a),
         verified: !!a.verified,
         carrying: a.carrying,
         suspicious: this.now < a.suspicious,
         isSelf: role === ROLE.HIDER && a.playerId === viewerPid,
+        // 隐藏者方始终可见队友色；搜寻者仅对已获证的隐藏者下发真色
+        ...(a.isHider && a.hiderColor && (role === ROLE.HIDER || a.verified) && { hiderColor: a.hiderColor }),
         pickup: role === ROLE.HIDER && a.playerId === viewerPid ? +a.pickupProgress.toFixed(2) : 0,
         deposit: role === ROLE.HIDER && a.playerId === viewerPid ? +a.depositProgress.toFixed(2) : 0,
-      };
-    });
+      }));
 
     // 信息素快照：每 2 tick 重新计算一次（降低序列化开销）
     let pheroSnap = null;
@@ -634,7 +633,9 @@ export class Game {
         }),
       },
       bait: this.bait && this.now < this.bait.until ? { x: this.bait.x, y: this.bait.y } : null,
-      hiderScores: this._hiderScoreList(),
+      hiderScores: role === ROLE.HIDER
+        ? this._hiderScoreList()
+        : this._hiderScoreList().map(({ color, ...rest }) => rest),
       hiderQuota: this.hiderQuota,
       phero: pheroSnap,  // null 时客户端复用上一帧缓存
       toolCooldownLeft: Object.fromEntries(

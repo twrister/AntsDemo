@@ -441,7 +441,10 @@ function updateHiderScorePanel(snap) {
   let html = `<div class="panel-title">隐藏者获证 ${quota > 0 ? `(目标 ${quota})` : ''}</div>`;
   for (const h of snap.hiderScores) {
     const cls = h.verified ? 'hider-score-row verified' : 'hider-score-row';
-    html += `<div class="${cls}"><span class="label">${escapeHtml(h.label)}</span><span class="progress">${h.score}/${h.quota}</span></div>`;
+    const dot = role === ROLE.HIDER && h.color
+      ? `<span class="hider-color-dot" style="background:${h.color}"></span>`
+      : '';
+    html += `<div class="${cls}">${dot}<span class="label">${escapeHtml(h.label)}</span><span class="progress">${h.score}/${h.quota}</span></div>`;
   }
   panel.innerHTML = html;
 }

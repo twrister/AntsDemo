@@ -17,7 +17,7 @@ let myHostId = null;
 let controller = null;
 let world = null;
 let running = false;
-let showPheromone = true;
+let showPheromone = false;
 
 // ---- DOM helpers ----
 const $ = (id) => document.getElementById(id);
@@ -203,6 +203,7 @@ function setPheroVisible(visible) {
 }
 
 $('pheroToggleBtn').addEventListener('click', () => setPheroVisible(!showPheromone));
+setPheroVisible(showPheromone);
 
 // ---- 连接 ----
 

@@ -13,10 +13,9 @@ export const CONFIG = {
   MAX_HIDERS: 4,            // 单局最多隐藏者人数
   /** 隐藏者阵营标识色（按加入顺序分配，仅隐藏者方可见） */
   HIDER_COLORS: ['#6fc36f', '#5eb8e8', '#e8a05e', '#c36fd4'],
-  // 团队食物总量公式（用于均分获证目标）：总量 = 2 + 隐藏者人数
-  foodQuota: (hiderCount) => 2 + hiderCount,
-  /** 每位隐藏者获证所需食物份数（由团队总量均分后向上取整） */
-  hiderFoodQuota: (hiderCount) => Math.max(1, Math.ceil((2 + hiderCount) / hiderCount)),
+  /** 每位隐藏者获证所需食物份数（固定值，与人数无关） */
+  HIDER_FOOD_QUOTA: 10,
+  hiderFoodQuota: () => 10,
 
   FOOD_ACTION_TIME: 1,          // 取食物 / 放食物等待时间 (秒)
 

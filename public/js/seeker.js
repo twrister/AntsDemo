@@ -8,6 +8,7 @@ export class SeekerController {
     this.net = net;
     this.world = world;
     this.debugMode = !!world.debugMode;
+    this.noToolCd = !!world.noToolCd;
     this.baseZoom = computeFitZoom(canvas, world);
     this.cam = { x: world.w / 2, y: world.h / 2, zoom: this.baseZoom };
     this.armedTool = null;        // 已选中待施放的瞄准类工具
@@ -108,7 +109,7 @@ export class SeekerController {
 
   /** 判断某工具是否处于独立 CD 中 */
   _isToolBlocked(tool, snap = this.lastSnap) {
-    if (this.debugMode || !snap) return false;
+    if (this.noToolCd || !snap) return false;
     return (snap.toolCooldownLeft?.[tool] ?? 0) > 0;
   }
 
@@ -122,7 +123,7 @@ export class SeekerController {
     return Math.max(0, (this._localMarkCdUntil - performance.now()) / 1000);
   }
 
-  /** 标记功能是否在冷却中（调试模式仅豁免工具 CD，标记冷却始终生效） */
+  /** 标记功能是否在冷却中（无 CD 模式仅豁免工具 CD，标记冷却始终生效） */
   _isMarkBlocked(snap = this._markSnap()) {
     const serverCd = snap?.markCdLeft ?? 0;
     return Math.max(serverCd, this._localMarkCdLeft()) > 0;
@@ -193,7 +194,7 @@ export class SeekerController {
       const def = this.world.tools[key];
       const el = document.createElement('div');
       el.className = 'tool';
-      el.innerHTML = `<div class="tool-tip">${def.desc || ''}</div><div class="key">[${i + 1}]</div><div class="name">${def.name}</div><div class="cd">${this.debugMode ? '无 CD' : `CD ${def.cd}s`}</div><div class="cover hidden"></div>`;
+      el.innerHTML = `<div class="tool-tip">${def.desc || ''}</div><div class="key">[${i + 1}]</div><div class="name">${def.name}</div><div class="cd">${this.noToolCd ? '无 CD' : `CD ${def.cd}s`}</div><div class="cover hidden"></div>`;
       el.addEventListener('click', () => this._activateTool(key));
       bar.appendChild(el);
       this.toolEls[key] = el;
@@ -208,6 +209,12 @@ export class SeekerController {
   // 每帧更新：工具冷却 UI，并返回渲染参数
   update(snap, dt = 0) {
     this.lastSnap = snap;
+    if (snap.noToolCd !== undefined) this.noToolCd = !!snap.noToolCd;
+    for (const key of this.toolKeys) {
+      const cdEl = this.toolEls[key].querySelector('.cd');
+      const def = this.world.tools[key];
+      cdEl.textContent = this.noToolCd ? '无 CD' : `CD ${def.cd}s`;
+    }
     // 与服务器同步本地标记冷却
     if ((snap.markCdLeft ?? 0) > 0) {
       this._localMarkCdUntil = Math.max(
@@ -243,11 +250,11 @@ export class SeekerController {
       }
     }
 
-    // 各工具独立冷却遮罩（调试模式无限制）
+    // 各工具独立冷却遮罩（无 CD 模式无限制）
     for (const key of this.toolKeys) {
       const cover = this.toolEls[key].querySelector('.cover');
       const cdLeft = snap.toolCooldownLeft?.[key] ?? 0;
-      const blocked = !this.debugMode && cdLeft > 0;
+      const blocked = !this.noToolCd && cdLeft > 0;
       if (blocked) { cover.classList.remove('hidden'); cover.textContent = cdLeft.toFixed(0); }
       else cover.classList.add('hidden');
     }

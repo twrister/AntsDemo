@@ -125,6 +125,17 @@ html, body {
 
 #myRoleLine { font-size: 15px; margin-bottom: 12px; }
 
+.match-duration-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; margin: 10px 0 4px; font-size: 13px;
+}
+.match-duration-row label { color: #b3a98a; flex-shrink: 0; }
+.match-duration-row select {
+  flex: 1; max-width: 160px; padding: 7px 10px; border-radius: 8px;
+  border: 1px solid #4a3d28; background: #1c1813; color: #e8dcc8; font-size: 13px;
+}
+.match-duration-row select:disabled { opacity: 0.65; cursor: not-allowed; }
+
 .role-switch-row { display: flex; gap: 10px; margin: 12px 0; }
 .role-btn {
   flex: 1; padding: 9px 8px; border-radius: 8px; border: 1px solid #4a3d28;

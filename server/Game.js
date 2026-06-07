@@ -24,10 +24,13 @@ function moveToward(pos, target, maxDist) {
 
 export class Game {
   /** @param hiderPlayers 隐藏者描述数组：{ id, bot } */
-  /** @param opts.debugMode 单机调试：搜寻者工具无 CD（标记冷却仍生效） */
+  /** @param opts.debugMode 单机调试对局 */
+  /** @param opts.noToolCd 搜寻者工具无 CD（标记冷却仍生效） */
+  /** @param opts.matchDuration 本局时长 (秒) */
   constructor(hiderPlayers, opts = {}) {
     this.now = 0;
-    this.timeLeft = CONFIG.MATCH_DURATION;
+    this.matchDuration = opts.matchDuration ?? CONFIG.MATCH_DURATION;
+    this.timeLeft = this.matchDuration;
     this.ants = [];
     this._nextAntId = 0;  // 全局自增 ID，避免 _adjustAntCount 增量时 ID 重复
     this.foodSources = [];
@@ -42,10 +45,9 @@ export class Game {
     this.phero = new PheromoneField();
     this._pheroTickCount = 0; // 每 2 tick 才生成一次信息素快照以节省带宽
 
-    // 工具状态（各工具独立 CD）
-    this.toolCooldownUntil = Object.fromEntries(
-      Object.keys(CONFIG.TOOLS).map((k) => [k, 0]),
-    );
+    // 工具状态（各工具独立 CD，开局默认进入冷却）
+    this.toolCooldownUntil = {};
+    this._toolsUsed = false;
     this.markCooldownUntil = 0;
     this.effects = {};
     this.lightBeam = null; // 强光照射：{ x, y, until }
@@ -64,8 +66,24 @@ export class Game {
     // 开发者工具：运行时 AI 参数覆盖（不影响 config.js 默认值）
     this.devCfg = {};
     this.debugMode = !!opts.debugMode;
+    this.noToolCd = !!opts.noToolCd;
 
     this._buildWorld(hiderPlayers);
+    this._resetStartingToolCooldowns();
+  }
+
+  /** 读取某工具当前 CD 时长（秒），devCfg 可覆盖 config 默认值 */
+  _toolCd(tool) {
+    const override = this.devCfg.TOOL_CD?.[tool];
+    if (override !== undefined) return override;
+    return CONFIG.TOOLS[tool]?.cd ?? 0;
+  }
+
+  /** 开局或 dev 调参后、尚未使用任何工具时，将所有工具置为满 CD */
+  _resetStartingToolCooldowns() {
+    for (const k of Object.keys(CONFIG.TOOLS)) {
+      this.toolCooldownUntil[k] = this.noToolCd ? 0 : this.now + this._toolCd(k);
+    }
   }
 
   _buildWorld(hiderPlayers) {
@@ -356,13 +374,13 @@ export class Game {
 
   /** 某工具剩余冷却 (秒) */
   _toolCdLeft(tool) {
-    if (this.debugMode) return 0;
+    if (this.noToolCd) return 0;
     return Math.max(0, +(this.toolCooldownUntil[tool] - this.now).toFixed(1));
   }
 
   /** 工具是否可用（未在独立 CD 中） */
   _canUseTool(tool) {
-    if (this.debugMode) return true;
+    if (this.noToolCd) return true;
     return this.now >= (this.toolCooldownUntil[tool] ?? 0);
   }
 
@@ -383,11 +401,12 @@ export class Game {
 
     if (active) {
       if (!this[field]) {
-        // 光束刚结束后的残留 active:true 不应重启（调试模式无 CD 时尤甚）
+        // 光束刚结束后的残留 active:true 不应重启（无 CD 时尤甚）
         const lastUntil = this[cfg.lastUntil];
         if (lastUntil > 0 && this.now < lastUntil + 0.3) return;
         if (!this._canUseTool(tool)) return;
-        if (!this.debugMode) this.toolCooldownUntil[tool] = this.now + def.cd;
+        this._toolsUsed = true;
+        if (!this.noToolCd) this.toolCooldownUntil[tool] = this.now + this._toolCd(tool);
         this[field] = { x, y, targetX: x, targetY: y, until: this.now + def.duration };
         this.events.push({ t: 'tool', tool, x, y });
       } else {
@@ -528,7 +547,7 @@ export class Game {
   update(dt) {
     if (this.over) return;
     this.now += dt;
-    this.timeLeft = Math.max(0, CONFIG.MATCH_DURATION - this.now);
+    this.timeLeft = Math.max(0, this.matchDuration - this.now);
 
     // 信息素蒸发（负反馈，每帧执行）
     this.phero.evaporate(dt);
@@ -762,6 +781,7 @@ export class Game {
       ),
       markCdLeft: this._markCdLeft(),
       debugMode: this.debugMode,
+      noToolCd: this.noToolCd,
       lightBeam: this.lightBeam && this.now < this.lightBeam.until
         ? {
             x: this.lightBeam.x,
@@ -825,9 +845,11 @@ export class Game {
   /**
    * 更新开发者调试参数（运行时热修改 AI 行为，不重启对局）。
    * 所有参数下一帧即生效（speed/turn 逐帧读取；ant count 立即增删蚂蚁）。
-   * 支持字段：AI_SPEED_BASE / AI_TURN_SMOOTH / AI_SOCIAL_CHANCE / AI_SPEED（含 carry / carryRich）/ AI_ANT_COUNT / FOOD_COUNT / FOOD_CAPACITY / BEAM_SPEED / SNIFF_RADIUS
+   * 支持字段：AI_SPEED_BASE / AI_TURN_SMOOTH / AI_SOCIAL_CHANCE / AI_SPEED（含 carry / carryRich）/ AI_ANT_COUNT / FOOD_COUNT / FOOD_CAPACITY / BEAM_SPEED / SNIFF_RADIUS / TOOL_CD / DEBUG_NO_CD
    */
   setDevConfig(params) {
+    let toolCdChanged = false;
+    if (params.DEBUG_NO_CD !== undefined) this.noToolCd = !!params.DEBUG_NO_CD;
     if (params.AI_SPEED_BASE !== undefined) this.devCfg.AI_SPEED_BASE = +params.AI_SPEED_BASE;
     if (params.AI_TURN_SMOOTH !== undefined) this.devCfg.AI_TURN_SMOOTH = +params.AI_TURN_SMOOTH;
     if (params.AI_SOCIAL_CHANCE !== undefined) this.devCfg.AI_SOCIAL_CHANCE = +params.AI_SOCIAL_CHANCE;
@@ -848,6 +870,17 @@ export class Game {
     }
     if (params.SNIFF_RADIUS !== undefined) {
       this.devCfg.SNIFF_RADIUS = Math.max(50, Math.min(300, +params.SNIFF_RADIUS));
+    }
+    if (params.TOOL_CD) {
+      this.devCfg.TOOL_CD = { ...this.devCfg.TOOL_CD };
+      for (const [tool, cd] of Object.entries(params.TOOL_CD)) {
+        if (!CONFIG.TOOLS[tool] || cd === undefined) continue;
+        this.devCfg.TOOL_CD[tool] = Math.max(0, Math.min(30, +cd));
+      }
+      toolCdChanged = true;
+    }
+    if ((toolCdChanged || params.DEBUG_NO_CD !== undefined) && !this._toolsUsed) {
+      this._resetStartingToolCooldowns();
     }
   }
 

@@ -9,6 +9,7 @@ export const C2S = {
   LEAVE_ROOM:   'leave_room',   // {}
   SWITCH_ROLE:  'switch_role',  // { role: 'seeker'|'hider' }
   START_GAME:   'start_game',   // {} 房主开局
+  SET_MATCH_DURATION: 'set_match_duration', // { minutes: 1~10 } 房主设置对局时长
 
   // 旧接口保留
   JOIN:         'join',         // 旧版兼容，已替换为 CREATE_ROOM/JOIN_ROOM

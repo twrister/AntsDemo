@@ -23,6 +23,7 @@ export class Room {
     this.game = null;
     this.loop = null;
     this.pendingDevCfg = null;
+    this.matchDurationMin = CONFIG.MATCH_DURATION / 60; // 对局时长 (分钟)，房主可改
   }
 
   get seeker() { return [...this.players.values()].find(p => p.role === ROLE.SEEKER); }
@@ -40,6 +41,7 @@ export class Room {
       count: this.count,
       state: this.state,
       hostName: host ? host.name : '',
+      matchMinutes: this.matchDurationMin,
     };
   }
 
@@ -113,6 +115,14 @@ export class Room {
     this.broadcastLobby();
   }
 
+  /** 房主设置对局时长（分钟，1~10）；变更后所有人需重新准备 */
+  setMatchDuration(id, minutes) {
+    if (this.state !== 'lobby' || id !== this.hostId) return;
+    this.matchDurationMin = CONFIG.matchDurationSeconds(minutes) / 60;
+    for (const p of this.players.values()) p.ready = false;
+    this.broadcastLobby();
+  }
+
   /** 切换准备状态（已准备再点则取消） */
   toggleReady(id) {
     const p = this.players.get(id);
@@ -171,7 +181,7 @@ export class Room {
       hiders = [{ id: p.id, bot: false, name: p.name }];
       while (hiders.length < CONFIG.MIN_HIDERS) hiders.push({ id: `bot_${botIdx++}`, bot: true });
     }
-    this._beginPlaying(hiders, { debugMode: true });
+    this._beginPlaying(hiders, { debugMode: true, noToolCd: CONFIG.DEBUG_NO_CD });
   }
 
   _resetToLobby() {
@@ -181,9 +191,22 @@ export class Room {
     for (const p of this.players.values()) p.ready = false;
   }
 
+  /** 下发客户端工具配置，合并运行时 devCfg.TOOL_CD 覆盖 */
+  _toolsForClient(game) {
+    const tools = JSON.parse(JSON.stringify(CONFIG.TOOLS));
+    const overrides = game?.devCfg?.TOOL_CD;
+    if (overrides) {
+      for (const [k, cd] of Object.entries(overrides)) {
+        if (tools[k]) tools[k].cd = cd;
+      }
+    }
+    return tools;
+  }
+
   _beginPlaying(hiders, opts = {}) {
     this.state = 'playing';
-    this.game = new Game(hiders, opts);
+    const matchDuration = CONFIG.matchDurationSeconds(this.matchDurationMin);
+    this.game = new Game(hiders, { ...opts, matchDuration });
     if (this.pendingDevCfg) this.game.setDevConfig(this.pendingDevCfg);
 
     for (const p of this.players.values()) {
@@ -195,8 +218,10 @@ export class Room {
           w: CONFIG.WORLD_W,
           h: CONFIG.WORLD_H,
           viewRatio: CONFIG.SEEKER_VIEW_RATIO,
-          tools: CONFIG.TOOLS,
+          tools: this._toolsForClient(this.game),
           debugMode: !!opts.debugMode,
+          noToolCd: !!opts.noToolCd,
+          matchDuration,
           hidingSpots: this.game.hidingSpots.map((s) => ({
             x: Math.round(s.x),
             y: Math.round(s.y),
@@ -265,6 +290,7 @@ export class Room {
       state: this.state,
       canStart: cs.ok,
       canStartReason: cs.reason,
+      matchDurationMin: this.matchDurationMin,
     });
   }
 
@@ -277,6 +303,7 @@ export class Room {
       case 'ready': this.toggleReady(id); break;
       case 'switch_role': if (this.state === 'lobby') this.switchRole(id, msg.role); break;
       case 'start_game': this.startGame(id); break;
+      case 'set_match_duration': this.setMatchDuration(id, msg.minutes); break;
       case 'solo_start':
         if (this.state === 'lobby' || this.state === 'ended') this.startSolo(id, msg.role);
         break;

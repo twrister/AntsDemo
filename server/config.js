@@ -7,7 +7,15 @@ export const CONFIG = {
   WORLD_H: 1200,            // 世界高 (像素)
 
   // 对局
-  MATCH_DURATION: 600,      // 单局时长 (秒)，基准 600
+  MATCH_DURATION: 600,              // 单局默认时长 (秒)
+  MATCH_DURATION_MIN_MINUTES: 1,    // 可配置最短对局 (分钟)
+  MATCH_DURATION_MAX_MINUTES: 10,   // 可配置最长对局 (分钟)
+  /** 将分钟数限制在合法范围并转为秒 */
+  matchDurationSeconds(minutes) {
+    const m = Math.round(Number(minutes) || 0);
+    const clamped = Math.max(this.MATCH_DURATION_MIN_MINUTES, Math.min(this.MATCH_DURATION_MAX_MINUTES, m));
+    return clamped * 60;
+  },
   AI_ANT_COUNT: 30,         // 地图 AI 蚂蚁数量
   MIN_HIDERS: 1,            // 最少隐藏者(不足用 AI 占位)
   MAX_HIDERS: 4,            // 单局最多隐藏者人数
@@ -22,11 +30,14 @@ export const CONFIG = {
   // 外观破绽
   TRAIT_DEVIANCE_VISIBILITY: 0.15, // 特征偏差可见度 15%
 
-  // 工具 (各工具独立冷却，单位秒)
+  // 工具 (各工具独立冷却，单位秒；开局默认处于满 CD 状态)
   TOOLS: {
     panic:   { name: '强光照射', cd: 30, duration: 4, radius: 120, beamSpeed: 280, desc: '在鼠标位置投射强光，范围内 AI 蚂蚁逃离光源，隐藏者不受影响。选中后点击地图开始照射，自动持续 4 秒。' },
     sniff:   { name: '气息嗅探', cd: 20, duration: 5, warnDuration: 1, radius: 100, beamSpeed: 280, desc: '释放气息探测圈跟随鼠标，嗅探到隐藏者后圈持续变红警告 1 秒后结束；未嗅探到则持续 5 秒。选中后点击地图开始嗅探。' },
   },
+  /** 调试模式下搜寻者工具是否无 CD（标记冷却不受影响）；默认关闭 */
+  DEBUG_NO_CD: false,
+
   MARK_COOLDOWN: { min: 3, max: 5 }, // 误标记后标记功能冷却 (秒)
   MISMARK_FLEE_DURATION: 1.2,          // 误标 AI 逃窜时长 (秒)
   HIDER_LIVES: 3,                      // 每位隐藏者默认生命数，被标中一次减 1，归零淘汰

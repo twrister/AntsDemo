@@ -25,10 +25,20 @@ const $ = (id) => document.getElementById(id);
 /** 调试端口页面标记（debug.html 上 data-debug="true"） */
 const DEBUG_MODE = document.body.dataset.debug === 'true';
 
+const MATCH_DURATION_MIN = 1;
+const MATCH_DURATION_MAX = 10;
+const MATCH_DURATION_DEFAULT = 10;
+
 // ---- 开发者工具（仅调试端口） ----
 
 const AI_ANT_COUNT_MIN = 10;
 const AI_ANT_COUNT_MAX = 200;
+
+/** 各工具 CD 调试滑条元数据（与 server/config.js TOOLS 键名一致） */
+const TOOL_CD_META = {
+  panic: { label: '强光照射 CD', min: 0, max: 30, default: 30 },
+  sniff: { label: '气息嗅探 CD', min: 0, max: 30, default: 20 },
+};
 
 const DEV_DEFAULTS = {
   AI_ANT_COUNT: 30,
@@ -40,9 +50,22 @@ const DEV_DEFAULTS = {
   FOOD_CAPACITY: 60,
   BEAM_SPEED: 280,
   SNIFF_RADIUS: 100,
+  TOOL_CD: Object.fromEntries(
+    Object.entries(TOOL_CD_META).map(([k, m]) => [k, m.default]),
+  ),
+  DEBUG_NO_CD: false,
 };
 
 const DEV_STORAGE_KEY = 'antsDemo_devCfg';
+
+function readToolCdFromDom() {
+  const toolCd = {};
+  for (const key of Object.keys(TOOL_CD_META)) {
+    const inp = $(`devToolCd_${key}`);
+    if (inp) toolCd[key] = parseInt(inp.value, 10);
+  }
+  return toolCd;
+}
 
 function persistDevConfig() {
   if (!DEBUG_MODE) return;
@@ -60,6 +83,8 @@ function persistDevConfig() {
     FOOD_CAPACITY: parseInt($('devFoodCapacity').value, 10),
     BEAM_SPEED: parseInt($('devBeamSpeed').value, 10),
     SNIFF_RADIUS: parseInt($('devSniffRadius').value, 10),
+    TOOL_CD: readToolCdFromDom(),
+    DEBUG_NO_CD: $('devNoCdCheck').checked,
   };
   localStorage.setItem(DEV_STORAGE_KEY, JSON.stringify(cfg));
 }
@@ -74,11 +99,24 @@ function applySniffRadiusToWorld(radius) {
   if (world?.tools?.sniff) world.tools.sniff.radius = radius;
 }
 
+/** 将各工具 CD 同步到客户端 world 配置 */
+function applyToolCdToWorld(toolCd) {
+  if (!world?.tools || !toolCd) return;
+  for (const [key, cd] of Object.entries(toolCd)) {
+    if (world.tools[key]) world.tools[key].cd = cd;
+  }
+}
+
 function restoreDevConfig() {
   if (!DEBUG_MODE) return;
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(DEV_STORAGE_KEY) || '{}'); } catch (_) {}
-  const c = { ...DEV_DEFAULTS, ...saved, AI_SPEED: { ...DEV_DEFAULTS.AI_SPEED, ...(saved.AI_SPEED || {}) } };
+  const c = {
+    ...DEV_DEFAULTS,
+    ...saved,
+    AI_SPEED: { ...DEV_DEFAULTS.AI_SPEED, ...(saved.AI_SPEED || {}) },
+    TOOL_CD: { ...DEV_DEFAULTS.TOOL_CD, ...(saved.TOOL_CD || {}) },
+  };
   const antCount = Math.max(AI_ANT_COUNT_MIN, Math.min(AI_ANT_COUNT_MAX, c.AI_ANT_COUNT));
 
   $('devAntCount').min = AI_ANT_COUNT_MIN;
@@ -105,11 +143,19 @@ function restoreDevConfig() {
   $('devBeamSpeedVal').textContent = c.BEAM_SPEED;
   $('devSniffRadius').value = c.SNIFF_RADIUS;
   $('devSniffRadiusVal').textContent = c.SNIFF_RADIUS;
+  for (const [key, meta] of Object.entries(TOOL_CD_META)) {
+    const inp = $(`devToolCd_${key}`);
+    const valEl = $(`devToolCd_${key}Val`);
+    if (!inp || !valEl) continue;
+    const cd = Math.max(meta.min, Math.min(meta.max, c.TOOL_CD[key] ?? meta.default));
+    inp.value = cd;
+    valEl.textContent = cd;
+  }
+  $('devNoCdCheck').checked = !!c.DEBUG_NO_CD;
   applyBeamSpeedToWorld(c.BEAM_SPEED);
   applySniffRadiusToWorld(c.SNIFF_RADIUS);
+  applyToolCdToWorld(c.TOOL_CD);
 }
-
-restoreDevConfig();
 
 function sendDevConfig() {
   if (!DEBUG_MODE) return;
@@ -129,9 +175,12 @@ function sendDevConfig() {
     FOOD_CAPACITY: parseInt($('devFoodCapacity').value, 10),
     BEAM_SPEED: parseInt($('devBeamSpeed').value, 10),
     SNIFF_RADIUS: parseInt($('devSniffRadius').value, 10),
+    TOOL_CD: readToolCdFromDom(),
+    DEBUG_NO_CD: $('devNoCdCheck').checked,
   });
   applyBeamSpeedToWorld(parseInt($('devBeamSpeed').value, 10));
   applySniffRadiusToWorld(parseInt($('devSniffRadius').value, 10));
+  applyToolCdToWorld(readToolCdFromDom());
 }
 
 function bindSlider(id, valId, decimals) {
@@ -147,7 +196,27 @@ function bindSlider(id, valId, decimals) {
   });
 }
 
+/** 动态生成各工具 CD 调试滑条 */
+function buildDevToolCdSliders() {
+  const host = $('devToolCdRows');
+  if (!host) return;
+  host.innerHTML = '';
+  for (const [key, meta] of Object.entries(TOOL_CD_META)) {
+    const row = document.createElement('div');
+    row.className = 'dev-row';
+    row.innerHTML = `
+      <span class="dev-label">${meta.label}<span class="dev-range-hint">${meta.min} – ${meta.max} s</span></span>
+      <input type="range" id="devToolCd_${key}" min="${meta.min}" max="${meta.max}" step="1" value="${meta.default}" />
+      <span class="dev-val" id="devToolCd_${key}Val">${meta.default}</span>
+    `;
+    host.appendChild(row);
+    bindSlider(`devToolCd_${key}`, `devToolCd_${key}Val`, 0);
+  }
+}
+
 if (DEBUG_MODE) {
+  buildDevToolCdSliders();
+  restoreDevConfig();
   bindSlider('devAntCount', 'devAntCountVal', 0);
   bindSlider('devSpeedBase', 'devSpeedBaseVal', 0);
   bindSlider('devTurnSmooth', 'devTurnSmoothVal', 2);
@@ -184,12 +253,20 @@ if (DEBUG_MODE) {
     $('devBeamSpeedVal').textContent = DEV_DEFAULTS.BEAM_SPEED;
     $('devSniffRadius').value = DEV_DEFAULTS.SNIFF_RADIUS;
     $('devSniffRadiusVal').textContent = DEV_DEFAULTS.SNIFF_RADIUS;
+    for (const [key, meta] of Object.entries(TOOL_CD_META)) {
+      const cd = DEV_DEFAULTS.TOOL_CD[key] ?? meta.default;
+      $(`devToolCd_${key}`).value = cd;
+      $(`devToolCd_${key}Val`).textContent = cd;
+    }
+    $('devNoCdCheck').checked = DEV_DEFAULTS.DEBUG_NO_CD;
     sendDevConfig();
   });
 
   $('devPheroCheck').addEventListener('change', () => {
     setPheroVisible($('devPheroCheck').checked);
   });
+
+  $('devNoCdCheck').addEventListener('change', sendDevConfig);
 
   function toggleDevPanel() { $('devPanel').classList.toggle('hidden'); }
   $('devPanelBtn').addEventListener('click', toggleDevPanel);
@@ -199,18 +276,64 @@ if (DEBUG_MODE) {
   });
 }
 
+/** 切换信息素可视化（仅调试模式可用） */
 function setPheroVisible(visible) {
+  if (!DEBUG_MODE) {
+    showPheromone = false;
+    return;
+  }
   showPheromone = visible;
   const devCheck = $('devPheroCheck');
   if (devCheck) devCheck.checked = visible;
   const btn = $('pheroToggleBtn');
+  if (!btn) return;
   btn.textContent = visible ? '信息素' : '信息素(关)';
   btn.classList.toggle('phero-on', visible);
   btn.classList.toggle('phero-off', !visible);
 }
 
-$('pheroToggleBtn').addEventListener('click', () => setPheroVisible(!showPheromone));
-setPheroVisible(showPheromone);
+if (DEBUG_MODE) {
+  const pheroBtn = $('pheroToggleBtn');
+  if (pheroBtn) {
+    pheroBtn.addEventListener('click', () => setPheroVisible(!showPheromone));
+    setPheroVisible(showPheromone);
+  }
+}
+
+// ---- 对局时长（房主可配置 1~10 分钟） ----
+
+let syncingMatchDuration = false;
+
+/** 初始化对局时长下拉选项 */
+function initMatchDurationSelect() {
+  const sel = $('matchDurationSelect');
+  if (!sel || sel.options.length > 0) return;
+  for (let m = MATCH_DURATION_MIN; m <= MATCH_DURATION_MAX; m++) {
+    const opt = document.createElement('option');
+    opt.value = String(m);
+    opt.textContent = `${m} 分钟`;
+    sel.appendChild(opt);
+  }
+  sel.value = String(MATCH_DURATION_DEFAULT);
+}
+
+/** 根据大厅状态更新对局时长控件 */
+function updateMatchDurationUi(minutes, isHost) {
+  const sel = $('matchDurationSelect');
+  if (!sel) return;
+  const m = Math.max(MATCH_DURATION_MIN, Math.min(MATCH_DURATION_MAX, minutes || MATCH_DURATION_DEFAULT));
+  syncingMatchDuration = true;
+  sel.value = String(m);
+  syncingMatchDuration = false;
+  sel.disabled = !isHost;
+}
+
+initMatchDurationSelect();
+$('matchDurationSelect')?.addEventListener('change', () => {
+  if (syncingMatchDuration) return;
+  const minutes = parseInt($('matchDurationSelect').value, 10);
+  net.send({ type: 'set_match_duration', minutes });
+});
 
 // ---- 连接 ----
 
@@ -250,8 +373,9 @@ function renderRoomList(rooms) {
     item.className = 'room-item';
     const stateText = r.state === 'playing' ? '对局中' : r.state === 'ended' ? '已结束' : '等待中';
     const stateClass = r.state === 'playing' ? 'playing' : '';
+    const durTag = r.matchMinutes ? ` · ${r.matchMinutes}分` : '';
     item.innerHTML = `
-      <span class="room-item-name col-name">${escapeHtml(r.name)}</span>
+      <span class="room-item-name col-name">${escapeHtml(r.name)}${durTag}</span>
       <span class="col-host">${escapeHtml(r.hostName)}</span>
       <span class="col-count">${r.count}</span>
       <span class="room-item-state col-state ${stateClass}">${stateText}</span>
@@ -379,6 +503,7 @@ net.on('lobby', (m) => {
   $('startGameBtn').classList.toggle('hidden', !isHost);
   $('startGameBtn').disabled = !m.canStart;
   $('canStartHint').textContent = isHost && !m.canStart ? m.canStartReason : '';
+  updateMatchDurationUi(m.matchDurationMin, isHost);
 });
 
 net.on('start', (m) => {
@@ -386,6 +511,10 @@ net.on('start', (m) => {
   world = m.world;
   restoreDevConfig();
   showScreen('game');
+  if (world?.matchDuration) {
+    const left = Math.ceil(world.matchDuration);
+    $('timer').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+  }
   $('roleTag').textContent = role === ROLE.SEEKER ? '搜寻者' : '隐藏者';
   $('roleTag').className = 'hud-item ' + (role === ROLE.SEEKER ? 'role-seeker' : 'role-hider');
   if (role === ROLE.SEEKER) {

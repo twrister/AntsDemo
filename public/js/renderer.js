@@ -52,8 +52,33 @@ export class Renderer {
     ctx.restore();
 
     // 屏幕空间叠层
-    if (opts.role === ROLE.SEEKER && opts.viewRadius) this._drawVignette(ctx, W, H, opts.viewRadius);
+    if (opts.role === ROLE.SEEKER && opts.viewRadius) {
+      this._drawVignette(ctx, W, H, opts.viewRadius);
+      // 强光照射可穿透暗角，照亮四角阴暗处
+      if (opts.lightBeam) this._drawLightVignetteRelief(ctx, opts.lightBeam, cam, W, H, opts.time);
+    }
+    // 光束内蚂蚁二次绘制：叠在暗角之上，提升阴暗处辨识度
+    if (opts.lightBeam && opts.role === ROLE.SEEKER) {
+      ctx.save();
+      ctx.translate(W / 2, H / 2);
+      ctx.scale(zoom, zoom);
+      ctx.translate(-cam.x, -cam.y);
+      for (const ant of snap.ants) {
+        const illum = this._beamIllumination(ant, opts.lightBeam);
+        if (illum > 0.06) this._drawAnt(ctx, ant, opts, illum);
+      }
+      ctx.restore();
+    }
     if (opts.frozen) this._tint(ctx, W, H, 'rgba(120,180,255,0.14)');
+  }
+
+  /** 计算蚂蚁在强光束内的照明强度（0-1，中心最强） */
+  _beamIllumination(ant, beam) {
+    const r = beam.radius || 120;
+    const d = Math.hypot(ant.x - beam.x, ant.y - beam.y);
+    if (d >= r) return 0;
+    const t = 1 - d / r;
+    return t * t;
   }
 
   _drawGround(ctx, world) {
@@ -172,10 +197,14 @@ export class Renderer {
     ctx.stroke();
   }
 
-  // 核心：按特征绘制一只蚂蚁
-  _drawAnt(ctx, ant, opts) {
+  // 核心：按特征绘制一只蚂蚁；illum>0 时在强光下提亮并加轮廓光
+  _drawAnt(ctx, ant, opts, illum = 0) {
     const tr = ant.traits;
     ctx.save();
+    if (illum > 0.1) {
+      ctx.shadowColor = `rgba(255,248,210,${(0.45 + illum * 0.45).toFixed(2)})`;
+      ctx.shadowBlur = 2 + illum * 9;
+    }
     ctx.translate(ant.x, ant.y);
 
     // 步态摇摆 (gait)：身体左右摆动幅度
@@ -194,15 +223,19 @@ export class Renderer {
     ];
     const r = ratioTbl[tr.ratio] || ratioTbl[1];
 
-    // 胸甲色调 (tint)：基准棕 ± 等级
+    // 胸甲色调 (tint)：基准棕 ± 等级；强光下额外提亮
     const baseHue = 28;
-    const light = 22 + tr.tint * 6; // 5 个等级亮度
-    let body = `hsl(${baseHue}, 45%, ${light}%)`;
-    if (ant.marked) body = '#555';
+    const lightBoost = illum * 24;
+    const satBoost = illum * 8;
+    const light = Math.min(72, 22 + tr.tint * 6 + lightBoost);
+    const sat = Math.min(58, 45 + satBoost);
+    let body = `hsl(${baseHue}, ${sat}%, ${light}%)`;
+    if (ant.marked) body = illum > 0.2 ? '#777' : '#555';
     if (ant.isSelf) body = '#6fc36f';
     // 腿
-    ctx.strokeStyle = ant.marked ? '#444' : `hsl(${baseHue},40%,${light - 8}%)`;
-    ctx.lineWidth = 1.4;
+    const legLight = Math.max(12, light - 8 + illum * 6);
+    ctx.strokeStyle = ant.marked ? '#444' : `hsl(${baseHue},${sat - 5}%,${legLight}%)`;
+    ctx.lineWidth = 1.4 + illum * 0.8;
     for (const s of [-1, 1]) {
       for (let i = -1; i <= 1; i++) {
         ctx.beginPath();
@@ -212,13 +245,20 @@ export class Renderer {
       }
     }
 
+    // 强光下先画浅色描边，拉开与地面的对比
+    if (illum > 0.12) {
+      ctx.strokeStyle = `rgba(255,240,200,${(0.35 + illum * 0.4).toFixed(2)})`;
+      ctx.lineWidth = 1.6 + illum;
+      this._strokeAntBody(ctx, r);
+    }
+
     // 腹部
     ctx.fillStyle = body;
     if (r.square) { ctx.fillRect(-r.body * 0.6, 1, r.body * 1.2, r.body * 1.3); }
     else { ctx.beginPath(); ctx.ellipse(0, r.body * 0.6, r.body * 0.7, r.body, 0, 0, Math.PI * 2); ctx.fill(); }
 
     // 腹部条纹 (stripe)
-    this._drawStripe(ctx, tr.stripe, r, body);
+    this._drawStripe(ctx, tr.stripe, r, body, illum);
 
     // 胸
     ctx.fillStyle = body;
@@ -240,7 +280,7 @@ export class Renderer {
     }
 
     // 触角 (antenna)
-    this._drawAntennae(ctx, tr.antenna, r);
+    this._drawAntennae(ctx, tr.antenna, r, illum);
 
     ctx.restore();
 
@@ -269,10 +309,36 @@ export class Renderer {
     }
   }
 
-  _drawStripe(ctx, stripe, r, body) {
+  /** 蚂蚁躯干轮廓（强光描边用） */
+  _strokeAntBody(ctx, r) {
+    if (r.square) {
+      ctx.strokeRect(-r.body * 0.6, 1, r.body * 1.2, r.body * 1.3);
+      ctx.beginPath();
+      ctx.ellipse(0, -r.head * 0.2, r.head * 0.6, r.head * 0.8, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, -r.head - 1, r.head * 0.8, 0, Math.PI * 2);
+      ctx.stroke();
+      return;
+    }
+    ctx.beginPath();
+    ctx.ellipse(0, r.body * 0.6, r.body * 0.7, r.body, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(0, -r.head * 0.2, r.head * 0.6, r.head * 0.8, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, -r.head - 1, r.head * 0.8, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  _drawStripe(ctx, stripe, r, body, illum = 0) {
     ctx.save();
     const w = r.body * 0.6, cy = r.body * 0.6;
-    ctx.strokeStyle = 'rgba(10,8,4,0.7)'; ctx.fillStyle = 'rgba(10,8,4,0.7)'; ctx.lineWidth = 1.4;
+    const stripeAlpha = 0.7 - illum * 0.25;
+    ctx.strokeStyle = `rgba(10,8,4,${stripeAlpha.toFixed(2)})`;
+    ctx.fillStyle = `rgba(10,8,4,${stripeAlpha.toFixed(2)})`;
+    ctx.lineWidth = 1.4 + illum * 0.4;
     switch (stripe) {
       case 0: break; // 无
       case 1: // 单条居中
@@ -291,8 +357,10 @@ export class Renderer {
     ctx.restore();
   }
 
-  _drawAntennae(ctx, kind, r) {
-    ctx.strokeStyle = '#1a140c'; ctx.lineWidth = 1.3;
+  _drawAntennae(ctx, kind, r, illum = 0) {
+    const antLight = Math.min(42, 12 + illum * 28);
+    ctx.strokeStyle = illum > 0.1 ? `hsl(28,35%,${antLight}%)` : '#1a140c';
+    ctx.lineWidth = 1.3 + illum * 0.5;
     const baseY = -r.head - 2;
     for (const s of [-1, 1]) {
       ctx.beginPath();
@@ -314,6 +382,40 @@ export class Renderer {
     g.addColorStop(0, 'rgba(0,0,0,0)');
     g.addColorStop(1, 'rgba(8,6,3,0.92)');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+
+  /**
+   * 强光穿透暗角：用提亮叠层抵消 vignette，避免擦除导致蚂蚁发虚。
+   */
+  _drawLightVignetteRelief(ctx, beam, cam, W, H, time) {
+    const zoom = cam.zoom || 1;
+    const sx = W / 2 + (beam.x - cam.x) * zoom;
+    const sy = H / 2 + (beam.y - cam.y) * zoom;
+    const sr = (beam.radius || 120) * zoom * 1.2;
+    const pulse = 0.85 + 0.15 * Math.sin(time / 80);
+
+    // 抵消暗角压暗
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    const lift = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr);
+    lift.addColorStop(0, `rgba(255,248,215,${(0.78 * pulse).toFixed(3)})`);
+    lift.addColorStop(0.35, `rgba(255,235,170,${(0.52 * pulse).toFixed(3)})`);
+    lift.addColorStop(0.7, `rgba(255,220,130,${(0.22 * pulse).toFixed(3)})`);
+    lift.addColorStop(1, 'rgba(255,200,100,0)');
+    ctx.fillStyle = lift;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+
+    // 暖色光晕，强化被照亮区域
+    ctx.save();
+    ctx.globalCompositeOperation = 'soft-light';
+    const glow = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr * 0.85);
+    glow.addColorStop(0, `rgba(255,240,180,${(0.55 * pulse).toFixed(3)})`);
+    glow.addColorStop(0.5, `rgba(255,220,140,${(0.28 * pulse).toFixed(3)})`);
+    glow.addColorStop(1, 'rgba(255,200,100,0)');
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
   }
 
   _tint(ctx, W, H, color) { ctx.fillStyle = color; ctx.fillRect(0, 0, W, H); }

@@ -1,4 +1,6 @@
-// 隐藏者控制器：移动输入、拾取引导、镜头跟随自身蚂蚁。
+// 隐藏者控制器：移动输入、拾取引导、镜头跟随自身蚂蚁；淘汰后切全屏观战。
+import { computeFitZoom } from './const.js';
+
 export class HiderController {
   constructor({ canvas, input, net, world, antId }) {
     this.canvas = canvas;
@@ -6,12 +8,35 @@ export class HiderController {
     this.net = net;
     this.world = world;
     this.antId = antId;
+    this.baseZoom = computeFitZoom(canvas, world);
     this.cam = { x: world.w / 2, y: world.h / 2, zoom: 1.5 };
     this._lastMove = { dx: 0, dy: 0 };
     this._lastSprint = false;
     this._sendTimer = 0;
     this._displayBeam = null; // 客户端预测的光束位置，消除 10Hz 快照跳变
-    document.getElementById('hiderHint').classList.remove('hidden');
+    this._spectator = false;
+    this._hintEl = document.getElementById('hiderHint');
+    this._hintEl.classList.remove('hidden');
+    this._onResize = () => {
+      this.baseZoom = computeFitZoom(this.canvas, this.world);
+      if (!this._spectator) return;
+      this.cam.zoom = this.baseZoom;
+      this.cam.x = this.world.w / 2;
+      this.cam.y = this.world.h / 2;
+    };
+    window.addEventListener('resize', this._onResize);
+  }
+
+  /** 生命归零后切换为搜寻者同款全图缩放观战 */
+  _enterSpectator() {
+    if (this._spectator) return;
+    this._spectator = true;
+    this.cam.zoom = this.baseZoom;
+    this.cam.x = this.world.w / 2;
+    this.cam.y = this.world.h / 2;
+    this._hintEl.textContent = '你已淘汰，全屏观战中，等待对局结束';
+    this.net.send({ type: 'move', dx: 0, dy: 0 });
+    this.net.send({ type: 'sprint', active: false });
   }
 
   /** 与服务器同速追向目标点，每帧平滑渲染强光 */
@@ -54,8 +79,15 @@ export class HiderController {
   }
 
   update(snap, dt) {
-    // 镜头跟随自身蚂蚁
     const self = snap.ants.find(a => a.isSelf) || snap.ants.find(a => a.id === this.antId);
+
+    // 淘汰后固定全图观战（与搜寻者默认缩放一致），不再接收操作
+    if (snap.selfEliminated) {
+      this._enterSpectator();
+      return { cam: this.cam, frozen: snap.frozen, lightBeam: this._smoothLightBeam(snap, dt), spectator: true };
+    }
+
+    // 镜头跟随自身蚂蚁
     if (self) {
       this.cam.x += (self.x - this.cam.x) * 0.15;
       this.cam.y += (self.y - this.cam.y) * 0.15;

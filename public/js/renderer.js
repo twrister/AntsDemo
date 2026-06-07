@@ -385,11 +385,19 @@ export class Renderer {
       ctx.fillStyle = '#d6543c'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center';
       ctx.fillText('?', ant.x, ant.y - 20);
     }
-    // 被标记冻结
+    // 被标记冻结 + 复活倒计时
     if (ant.marked) {
       ctx.strokeStyle = '#d6543c'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(ant.x - 8, ant.y - 8); ctx.lineTo(ant.x + 8, ant.y + 8);
       ctx.moveTo(ant.x + 8, ant.y - 8); ctx.lineTo(ant.x - 8, ant.y + 8); ctx.stroke();
+      const left = Math.ceil(ant.markedLeft ?? 0);
+      if (left > 0) {
+        const canRespawn = (ant.lives ?? 0) > 0 && !ant.eliminated;
+        ctx.fillStyle = '#d6543c';
+        ctx.font = 'bold 13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(canRespawn ? `复活 ${left}s` : `冻结 ${left}s`, ant.x, ant.y - 22);
+      }
     }
     // 隐藏者自身取/放食物进度环
     const actionTime = opts.foodActionTime || 1;

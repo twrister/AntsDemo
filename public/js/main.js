@@ -426,8 +426,49 @@ function loop(now) {
 function updateHud(snap) {
   const m = Math.floor(snap.timeLeft / 60), s = snap.timeLeft % 60;
   $('timer').textContent = `${m}:${String(s).padStart(2, '0')}`;
+  updateLivesHud(snap);
+  updateMarkTimer(snap);
   updateHiderScorePanel(snap);
   updateDevAntStats(snap);
+}
+
+/** 显示自身剩余生命（仅存活隐藏者） */
+function updateLivesHud(snap) {
+  const el = $('livesHud');
+  if (!el) return;
+  const self = snap.ants?.find(a => a.isSelf);
+  if (role !== ROLE.HIDER || snap.selfEliminated || !self) {
+    el.classList.add('hidden');
+    return;
+  }
+  el.classList.remove('hidden');
+  el.textContent = `生命 ${self.lives ?? 3}`;
+}
+
+/** 被标记时显示复活倒计时（隐藏者 HUD + 搜寻者见蚂蚁头顶） */
+function updateMarkTimer(snap) {
+  const el = $('markTimer');
+  if (!el) return;
+  const self = snap.ants?.find(a => a.isSelf);
+  const left = Math.ceil(self?.markedLeft ?? 0);
+  const canRespawn = (self?.lives ?? 0) > 0 && !self?.eliminated;
+  if (role === ROLE.HIDER && !snap.selfEliminated && self?.marked && left > 0) {
+    el.classList.remove('hidden');
+    el.textContent = canRespawn ? `复活 ${left}s` : `冻结 ${left}s`;
+  } else {
+    el.classList.add('hidden');
+  }
+}
+
+/** 用 3 颗心表示剩余生命：实心 ♥ = 存活，空心 ♡ = 已失去 */
+function formatLivesHearts(lives, eliminated = false, max = 3) {
+  const n = eliminated ? 0 : Math.max(0, Math.min(max, lives ?? max));
+  let html = '<span class="lives-hearts">';
+  for (let i = 0; i < max; i++) {
+    const filled = i < n;
+    html += `<span class="heart ${filled ? 'filled' : 'empty'}">${filled ? '♥' : '♡'}</span>`;
+  }
+  return html + '</span>';
 }
 
 /** 渲染左上角各隐藏者获证进度 */
@@ -440,11 +481,12 @@ function updateHiderScorePanel(snap) {
   const quota = snap.hiderQuota ?? snap.hiderScores[0]?.quota ?? 0;
   let html = `<div class="panel-title">隐藏者获证 ${quota > 0 ? `(目标 ${quota})` : ''}</div>`;
   for (const h of snap.hiderScores) {
-    const cls = h.verified ? 'hider-score-row verified' : 'hider-score-row';
+    const cls = h.verified ? 'hider-score-row verified' : (h.eliminated ? 'hider-score-row eliminated' : 'hider-score-row');
     const dot = role === ROLE.HIDER && h.color
       ? `<span class="hider-color-dot" style="background:${h.color}"></span>`
       : '';
-    html += `<div class="${cls}">${dot}<span class="label">${escapeHtml(h.label)}</span><span class="progress">${h.score}/${h.quota}</span></div>`;
+    const livesHearts = h.lives != null ? formatLivesHearts(h.lives, h.eliminated) : '';
+    html += `<div class="${cls}">${dot}<span class="label">${escapeHtml(h.label)}</span>${livesHearts}<span class="progress">${h.score}/${h.quota}</span></div>`;
   }
   panel.innerHTML = html;
 }
@@ -476,11 +518,23 @@ function updateDevAntStats(snap) {
 
 function handleEvent(e) {
   switch (e.t) {
-    case 'mark_hit':
-      toast(role === ROLE.SEEKER ? '标记命中！隐藏者冻结 10 秒' : '你被标记了！10 秒内无法移动', 'bad');
+    case 'mark_hit': {
+      const lives = e.lives ?? 0;
+      if (role === ROLE.SEEKER) {
+        toast(lives > 0 ? `标记命中！对方剩余 ${lives} 条命` : '标记命中！隐藏者生命耗尽', 'bad');
+      } else {
+        toast(lives > 0
+          ? `你被标记了！剩余 ${lives} 条命，冻结 10 秒`
+          : '你被标记了！生命耗尽，即将淘汰', 'bad');
+      }
       break;
+    }
     case 'hider_respawn':
       if (role === ROLE.HIDER) toast('已在巢穴复活，继续搬运食物', 'good');
+      break;
+    case 'hider_eliminated':
+      if (role === ROLE.HIDER) toast('你已被淘汰，全屏观战至对局结束', 'bad');
+      else toast(`${e.label || '隐藏者'} 已淘汰`, 'good');
       break;
     case 'mark_miss':
       toast('误标记！AI 逃窜中，标记冷却', 'bad');
@@ -536,6 +590,8 @@ function resetGameUi() {
   $('hiderHint').classList.add('hidden');
   $('hiderScorePanel').classList.add('hidden');
   $('hiderScorePanel').innerHTML = '';
+  $('livesHud')?.classList.add('hidden');
+  $('markTimer')?.classList.add('hidden');
   updateDevAntStats(null);
 }
 

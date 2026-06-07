@@ -32,7 +32,8 @@ export const CONFIG = {
   },
   MARK_COOLDOWN: { min: 3, max: 5 }, // 误标记后标记功能冷却 (秒)
   MISMARK_FLEE_DURATION: 1.2,          // 误标 AI 逃窜时长 (秒)
-  HIDER_MARK_DURATION: 10,             // 隐藏者被标中后冻结时长 (秒)，结束后在巢穴复活
+  HIDER_LIVES: 3,                      // 每位隐藏者默认生命数，被标中一次减 1，归零淘汰
+  HIDER_MARK_DURATION: 10,             // 隐藏者被标中后冻结时长 (秒)，有剩余生命则在巢穴复活
 
   // 搜寻者视野
   SEEKER_VIEW_RATIO: 0.6,   // 屏幕 60%

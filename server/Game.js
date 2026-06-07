@@ -175,7 +175,8 @@ export class Game {
       traits: randomTraits(),
       carrying: false,
       markedUntil: 0,   // 被标中冻结截止时刻；0 表示正常
-      eliminated: false, // 玩家离场等永久出局
+      lives: isHider ? CONFIG.HIDER_LIVES : 0,
+      eliminated: false, // 生命归零或玩家离场等永久出局
       suspicious: 0,
       vx: 0, vy: 0,
       sprinting: false,
@@ -200,7 +201,7 @@ export class Game {
   // ---------- 玩家输入 ----------
   setHiderMove(pid, dx, dy) {
     const ant = this.ants.find(a => a.playerId === pid);
-    if (!ant || this._isMarked(ant)) return;
+    if (!ant || this._isMarked(ant) || ant.eliminated) return;
     const len = Math.hypot(dx, dy) || 1;
     ant.vx = dx / len; ant.vy = dy / len;
     if (dx || dy) ant.angle = Math.atan2(dy, dx);
@@ -209,7 +210,7 @@ export class Game {
   /** 隐藏者冲刺开关：按住空格时叠加加速倍率 */
   setHiderSprint(pid, active) {
     const ant = this.ants.find(a => a.playerId === pid);
-    if (!ant || this._isMarked(ant)) return;
+    if (!ant || this._isMarked(ant) || ant.eliminated) return;
     ant.sprinting = active;
   }
 
@@ -225,9 +226,10 @@ export class Game {
     if (this.over || this.now < this.markCooldownUntil) return;
     const ant = this.ants.find(a => a.id === antId);
     if (!ant || this._isMarked(ant)) return;
-    // 已获证的隐藏者不可再被标记
-    if (ant.isHider && ant.verified) return;
+    // 已获证或已淘汰的隐藏者不可再被标记
+    if (ant.isHider && (ant.verified || ant.eliminated)) return;
     if (ant.isHider) {
+      ant.lives = Math.max(0, ant.lives - 1);
       ant.markedUntil = this.now + CONFIG.HIDER_MARK_DURATION;
       ant.vx = ant.vy = 0;
       ant.sprinting = false;
@@ -236,7 +238,12 @@ export class Game {
         ant.pickupProgress = 0;
         ant.depositProgress = 0;
       }
-      this.events.push({ t: 'mark_hit', x: ant.x, y: ant.y });
+      this.events.push({ t: 'mark_hit', x: ant.x, y: ant.y, lives: ant.lives });
+      if (ant.lives <= 0) {
+        ant.eliminated = true;
+        this.events.push({ t: 'hider_eliminated', antId: ant.id, label: ant.hiderLabel });
+        this._checkWin();
+      }
     } else {
       // 误标 AI：触发逃窜态短暂打乱画面，并进入标记冷却
       triggerFlee(ant, CONFIG.MISMARK_FLEE_DURATION, { x: ant.x, y: ant.y });
@@ -345,7 +352,7 @@ export class Game {
     const src = { x: beam.x, y: beam.y };
     for (const a of this.ants) {
       if (this._isInsideNest(a)) continue;
-      if (a.isHider && !this._isMarked(a) && dist2(a, src) < r2) {
+      if (a.isHider && !a.eliminated && !this._isMarked(a) && dist2(a, src) < r2) {
         beam.hiderDetected = true;
         beam.warnUntil = this.now + 0.4;
         // 本次嗅探仅触发一次，直至光束结束
@@ -479,16 +486,17 @@ export class Game {
       cfg: this.devCfg,
     };
 
-    // 被标中冻结期满 → 巢穴复活
+    // 被标中冻结期满 → 有剩余生命则巢穴复活，否则解除冻结状态
     for (const ant of this.ants) {
-      if (ant.isHider && ant.markedUntil > 0 && this.now >= ant.markedUntil && !ant.eliminated) {
-        this._respawnHider(ant);
-      }
+      if (!ant.isHider || ant.markedUntil <= 0 || this.now < ant.markedUntil) continue;
+      if (ant.eliminated) ant.markedUntil = 0;
+      else this._respawnHider(ant);
     }
 
     // 更新蚂蚁
     for (const ant of this.ants) {
       if (this._isMarked(ant)) continue;
+      if (ant.isHider && ant.eliminated) continue;
       const foodBusy = this._processFoodAction(ant, dt);
       if (ant.isHider && !ant.bot) {
         if (!foodBusy) this._updateHider(ant, dt);
@@ -574,21 +582,34 @@ export class Game {
         score: a.foodScore,
         quota: this.hiderQuota,
         verified: a.verified,
+        lives: a.lives,
+        eliminated: a.eliminated,
       }));
   }
 
   // ---------- 快照 ----------
   snapshot(role, viewerPid) {
     const deposit = this._depositPoint();
-    const visibleAnts = role === ROLE.SEEKER
+    const viewerAnt = role === ROLE.HIDER
+      ? this.ants.find(a => a.isHider && a.playerId === viewerPid)
+      : null;
+    const visibleAnts = (role === ROLE.SEEKER
       ? this.ants.filter(a => !this._isInsideNest(a))
-      : this.ants;
+      : this.ants
+    ).filter(a => !(a.isHider && a.eliminated));
     const ants = visibleAnts.map(a => ({
         id: a.id,
         x: Math.round(a.x), y: Math.round(a.y),
         angle: +a.angle.toFixed(2),
         traits: a.traits,
         marked: this._isMarked(a),
+        ...(this._isMarked(a) && {
+          markedLeft: Math.ceil(a.markedUntil - this.now),
+        }),
+        ...(a.isHider && {
+          lives: a.lives,
+          eliminated: a.eliminated,
+        }),
         verified: !!a.verified,
         carrying: a.carrying,
         suspicious: this.now < a.suspicious,
@@ -619,6 +640,7 @@ export class Game {
     return {
       now: +this.now.toFixed(2),
       timeLeft: Math.ceil(this.timeLeft),
+      ...(role === ROLE.HIDER && { selfEliminated: !!viewerAnt?.eliminated }),
       ants,
       antStats: { ai: aiCount, hider: hiderCount, total: aiCount + hiderCount },
       // 食物堆替代原 normalFood：包含位置与剩余量

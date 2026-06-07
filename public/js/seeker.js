@@ -1,4 +1,4 @@
-// 搜寻者控制器：镜头平移、视野半径、点击标记、工具使用与全局冷却。
+// 搜寻者控制器：镜头平移、视野半径、点击标记、工具使用与各工具独立冷却。
 import { computeFitZoom } from './const.js';
 
 const GLOBAL_TOOLS = ['freeze'];  // 立即生效(全局)
@@ -111,10 +111,17 @@ export class SeekerController {
     this._localBeam.y += (dy / dist) * maxMove;
   }
 
+  /** 判断某工具是否被锁死或处于独立 CD 中 */
+  _isToolBlocked(tool, snap = this.lastSnap) {
+    if (this.debugMode || !snap) return false;
+    if (snap.lockLeft > 0) return true;
+    return (snap.toolCooldownLeft?.[tool] ?? 0) > 0;
+  }
+
   /** 强光照射：点击地图开始，自动持续至时长结束 */
   _startBeam(wp) {
     if (this.beamActive) return;
-    if (!this.debugMode && this.lastSnap && (this.lastSnap.cooldownLeft > 0 || this.lastSnap.lockLeft > 0)) return;
+    if (this._isToolBlocked('panic')) return;
     this.beamActive = true;
     this._beamConfirmed = false;
     this._beamSendTimer = 0;
@@ -132,7 +139,7 @@ export class SeekerController {
   }
 
   _activateTool(tool) {
-    if (!this.debugMode && this.lastSnap && (this.lastSnap.cooldownLeft > 0 || this.lastSnap.lockLeft > 0)) return;
+    if (this._isToolBlocked(tool)) return;
     if (GLOBAL_TOOLS.includes(tool)) {
       this.net.send({ type: 'use_tool', tool, x: this.cam.x, y: this.cam.y });
     } else {
@@ -209,18 +216,17 @@ export class SeekerController {
       }
     }
 
-    // 冷却 / 锁死遮罩（调试模式无限制）
-    const blocked = !this.debugMode && (snap.cooldownLeft > 0 || snap.lockLeft > 0);
-    const label = snap.lockLeft > 0 ? snap.lockLeft.toFixed(0) : snap.cooldownLeft.toFixed(0);
+    // 各工具独立冷却 / 误标记全工具锁死遮罩（调试模式无限制）
     for (const key of this.toolKeys) {
       const cover = this.toolEls[key].querySelector('.cover');
+      const cdLeft = snap.toolCooldownLeft?.[key] ?? 0;
+      const blocked = !this.debugMode && (snap.lockLeft > 0 || cdLeft > 0);
+      const label = snap.lockLeft > 0 ? snap.lockLeft.toFixed(0) : cdLeft.toFixed(0);
       if (blocked) { cover.classList.remove('hidden'); cover.textContent = label; }
       else cover.classList.add('hidden');
     }
-    if (blocked) {
+    if (this.armedTool && this._isToolBlocked(this.armedTool, snap)) {
       this.armedTool = null;
-      // 照射进行中不因全局 CD 中断（CD 在光束开始时已触发，仅阻止新工具）
-      if (!this.beamActive) this._localBeam = null;
       this._refreshArmed();
     }
 

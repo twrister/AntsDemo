@@ -24,7 +24,7 @@ function moveToward(pos, target, maxDist) {
 
 export class Game {
   /** @param hiderPlayers 隐藏者描述数组：{ id, bot } */
-  /** @param opts.debugMode 单机调试：搜寻者工具无全局 CD、误标记不锁技能 */
+  /** @param opts.debugMode 单机调试：搜寻者工具无 CD、误标记不锁技能 */
   constructor(hiderPlayers, opts = {}) {
     this.now = 0;
     this.timeLeft = CONFIG.MATCH_DURATION;
@@ -38,8 +38,10 @@ export class Game {
     this.phero = new PheromoneField();
     this._pheroTickCount = 0; // 每 2 tick 才生成一次信息素快照以节省带宽
 
-    // 工具状态
-    this.globalCooldownUntil = 0;
+    // 工具状态（各工具独立 CD）
+    this.toolCooldownUntil = Object.fromEntries(
+      Object.keys(CONFIG.TOOLS).map((k) => [k, 0]),
+    );
     this.lockUntil = 0;
     this.frozenUntil = 0;
     this.effects = {};
@@ -167,14 +169,25 @@ export class Game {
     }
   }
 
+  /** 某工具剩余冷却 (秒) */
+  _toolCdLeft(tool) {
+    if (this.debugMode) return 0;
+    return Math.max(0, +(this.toolCooldownUntil[tool] - this.now).toFixed(1));
+  }
+
+  /** 工具是否可用（未在独立 CD 中且未被误标记锁死） */
+  _canUseTool(tool) {
+    if (this.debugMode) return true;
+    if (this.now < this.lockUntil) return false;
+    return this.now >= (this.toolCooldownUntil[tool] ?? 0);
+  }
+
   useTool(tool, x, y) {
     if (this.over) return;
     const def = CONFIG.TOOLS[tool];
     if (!def) return;
-    if (!this.debugMode) {
-      if (this.now < this.globalCooldownUntil || this.now < this.lockUntil) return;
-      this.globalCooldownUntil = this.now + def.cd;
-    }
+    if (!this._canUseTool(tool)) return;
+    if (!this.debugMode) this.toolCooldownUntil[tool] = this.now + def.cd;
 
     switch (tool) {
       case 'freeze':
@@ -198,10 +211,8 @@ export class Game {
       if (!this.lightBeam) {
         // 光束刚结束后的残留 active:true 不应重启（调试模式无 CD 时尤甚）
         if (this._lastLightBeamUntil > 0 && this.now < this._lastLightBeamUntil + 0.3) return;
-        if (!this.debugMode) {
-          if (this.now < this.globalCooldownUntil || this.now < this.lockUntil) return;
-          this.globalCooldownUntil = this.now + def.cd;
-        }
+        if (!this._canUseTool(tool)) return;
+        if (!this.debugMode) this.toolCooldownUntil[tool] = this.now + def.cd;
         this.lightBeam = { x, y, targetX: x, targetY: y, until: this.now + def.duration };
         this.events.push({ t: 'tool', tool, x, y });
       } else {
@@ -445,7 +456,9 @@ export class Game {
       score: this.score,
       quota: this.quota,
       phero: pheroSnap,  // null 时客户端复用上一帧缓存
-      cooldownLeft: this.debugMode ? 0 : Math.max(0, +(this.globalCooldownUntil - this.now).toFixed(1)),
+      toolCooldownLeft: Object.fromEntries(
+        Object.keys(CONFIG.TOOLS).map((k) => [k, this._toolCdLeft(k)]),
+      ),
       lockLeft: this.debugMode ? 0 : Math.max(0, +(this.lockUntil - this.now).toFixed(1)),
       debugMode: this.debugMode,
       frozen: this.frozenUntil > this.now,

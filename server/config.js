@@ -18,7 +18,7 @@ export const CONFIG = {
   // 外观破绽
   TRAIT_DEVIANCE_VISIBILITY: 0.15, // 特征偏差可见度 15%
 
-  // 工具 (全局冷却，单位秒)
+  // 工具 (各工具独立冷却，单位秒)
   TOOLS: {
     panic:   { name: '强光照射', cd: 30, duration: 4, radius: 120, beamSpeed: 280, desc: '在鼠标位置投射强光，范围内 AI 蚂蚁逃离光源，隐藏者不受影响。选中后点击地图开始照射，自动持续 4 秒。' },
     bait:    { name: '诱饵食屑',   cd: 25, duration: 10, desc: '放置诱饵，靠近的隐藏者会被标为可疑（?）。点击地图施放，持续 10 秒。' },

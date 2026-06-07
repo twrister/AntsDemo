@@ -1,95 +1,156 @@
-// 房间/对局状态机：等待(lobby) -> 进行(playing) -> 结算(ended)。
-// 角色分配：第一个进房者为搜寻者，其余为隐藏者 (GDD：1 搜寻者 vs 3-5 隐藏者)。
+// 房间状态机：等待(lobby) -> 进行(playing) -> 结算(ended)。
 import { CONFIG } from './config.js';
 import { Game } from './Game.js';
 import { S2C, ROLE } from './protocol.js';
 
 export class Room {
-  constructor() {
+  /**
+   * @param {object} opts
+   * @param {string} opts.id       - 房间唯一 ID
+   * @param {string} opts.name     - 房间显示名称
+   * @param {boolean} [opts.isPrivate] - 是否私有（单机调试）
+   * @param {Function} [opts.onChange] - 状态变化回调，通知 manager 刷新列表
+   */
+  constructor({ id, name, isPrivate = false, onChange = null }) {
+    this.id = id;
+    this.name = name;
+    this.isPrivate = isPrivate;
+    this.onChange = onChange;
+
     this.players = new Map();   // playerId -> { id, name, ws, role, ready }
+    this.hostId = null;
     this.state = 'lobby';
     this.game = null;
     this.loop = null;
-    this.pendingDevCfg = null;  // 最近一次 dev_config，开局时自动套用
+    this.pendingDevCfg = null;
   }
 
   get seeker() { return [...this.players.values()].find(p => p.role === ROLE.SEEKER); }
   get hiders() { return [...this.players.values()].filter(p => p.role === ROLE.HIDER); }
 
+  /** 进入房间人数 */
+  get count() { return this.players.size; }
+
+  /** 摘要信息，供 manager 推送 room_list 使用 */
+  summary() {
+    const host = this.players.get(this.hostId);
+    return {
+      id: this.id,
+      name: this.name,
+      count: this.count,
+      state: this.state,
+      hostName: host ? host.name : '',
+    };
+  }
+
   addPlayer(player) {
-    // 上一局已结束时，新玩家进入自动把房间重置回大厅，避免卡在 ended 状态无法开始
     if (this.state === 'ended') this._resetToLobby();
-    // 没有搜寻者则该玩家成为搜寻者，否则为隐藏者
+
+    // 默认角色：无搜寻者则为搜寻者，否则为隐藏者
     player.role = this.seeker ? ROLE.HIDER : ROLE.SEEKER;
     player.ready = false;
     this.players.set(player.id, player);
-    this.send(player, { type: S2C.WELCOME, playerId: player.id, role: player.role });
+
+    // 第一个进房者成为房主
+    if (!this.hostId) this.hostId = player.id;
+
+    const cs = this.canStart();
+    this.send(player, {
+      type: S2C.WELCOME,
+      playerId: player.id,
+      role: player.role,
+      roomId: this.id,
+      roomName: this.name,
+      hostId: this.hostId,
+    });
     this.broadcastLobby();
+    this.onChange?.();
   }
 
   removePlayer(id) {
     const p = this.players.get(id);
     if (!p) return;
     this.players.delete(id);
-    // 搜寻者掉线则结束对局
+
     if (this.state === 'playing' && p.role === ROLE.SEEKER) {
       this.endGame(ROLE.HIDER, '搜寻者离开了');
     } else if (this.state === 'playing' && p.role === ROLE.HIDER && this.game) {
-      // 隐藏者掉线视为其蚂蚁被移除
       const ant = this.game.ants.find(a => a.playerId === id);
       if (ant) ant.marked = true;
       this.game._checkWin();
     }
-    // 房间空了则彻底重置，避免下次进来卡在残留状态
-    if (this.players.size === 0) { this._resetToLobby(); return; }
-    // 大厅中搜寻者离开 -> 提升一名剩余玩家为搜寻者
+
+    if (this.players.size === 0) {
+      this._resetToLobby();
+      this.onChange?.();
+      return;
+    }
+
+    // 房主离开则转交给剩余首位玩家
+    if (this.hostId === id) {
+      this.hostId = [...this.players.keys()][0];
+    }
+
+    // 大厅中搜寻者离开 -> 提升首位剩余玩家
     if (this.state === 'lobby' && !this.seeker) {
       const first = [...this.players.values()][0];
       if (first) first.role = ROLE.SEEKER;
     }
+
     this.broadcastLobby();
+    this.onChange?.();
   }
 
-  // 把房间重置回大厅状态（清理对局循环、游戏实例与准备标记）
-  _resetToLobby() {
-    if (this.loop) { clearInterval(this.loop); this.loop = null; }
-    this.game = null;
-    this.state = 'lobby';
-    for (const p of this.players.values()) p.ready = false;
-  }
-
-  setReady(id) {
+  /** 切换玩家角色（大厅期间自由切换，不自动校验） */
+  switchRole(id, role) {
+    if (this.state !== 'lobby') return;
     const p = this.players.get(id);
     if (!p) return;
-    p.ready = true;
+    if (role !== ROLE.SEEKER && role !== ROLE.HIDER) return;
+    p.role = role;
+    p.ready = false; // 切换角色后重置准备
     this.broadcastLobby();
-    // 搜寻者与所有在场隐藏者都准备好才开始 (隐藏者不足时用 bot 占位)
-    const allHidersReady = this.hiders.every(h => h.ready);
-    if (this.state === 'lobby' && this.seeker && this.seeker.ready && allHidersReady) {
-      this.startGame();
-    }
   }
 
-  canStart() { return !!this.seeker; }
-
-  broadcastLobby() {
-    const players = [...this.players.values()].map(p => ({ id: p.id, name: p.name, role: p.role, ready: p.ready }));
-    this.broadcast({ type: S2C.LOBBY, players, canStart: this.canStart(), state: this.state });
+  /** 切换准备状态（已准备再点则取消） */
+  toggleReady(id) {
+    const p = this.players.get(id);
+    if (!p || this.state !== 'lobby') return;
+    p.ready = !p.ready;
+    this.broadcastLobby();
   }
 
-  startGame() {
-    // 组装隐藏者列表，不足 MIN_HIDERS 用 bot 占位
+  /**
+   * 校验是否满足开局条件。
+   * @returns {{ ok: boolean, reason: string }}
+   */
+  canStart() {
+    const seekers = [...this.players.values()].filter(p => p.role === ROLE.SEEKER);
+    const hiders = this.hiders;
+    if (seekers.length !== 1) return { ok: false, reason: '需要恰好 1 名搜寻者' };
+    if (hiders.length < 1) return { ok: false, reason: '至少需要 1 名隐藏者' };
+    const notReady = [...this.players.values()].filter(p => !p.ready);
+    if (notReady.length > 0) return { ok: false, reason: '还有玩家未准备' };
+    return { ok: true, reason: '' };
+  }
+
+  /**
+   * 房主触发开局。
+   * @param {string} id - 发起者 playerId，必须是 hostId
+   */
+  startGame(id) {
+    if (id !== this.hostId) return;
+    if (this.state !== 'lobby') return;
+    const cs = this.canStart();
+    if (!cs.ok) return;
+
     let hiders = this.hiders.map(p => ({ id: p.id, bot: false }));
     let botIdx = 0;
     while (hiders.length < CONFIG.MIN_HIDERS) hiders.push({ id: `bot_${botIdx++}`, bot: true });
-    if (this.hiders.length === 0) {
-      // 单人(仅搜寻者)测试：补 2 个 bot 隐藏者制造目标
-      while (hiders.length < 2) hiders.push({ id: `bot_${botIdx++}`, bot: true });
-    }
     this._beginPlaying(hiders);
   }
 
-  // 单机调试：指定角色立即开局（仅房间只有自己时可用）
+  /** 单机调试：指定角色立即开局（仅自己一人） */
   startSolo(playerId, role) {
     if (this.state === 'playing') return;
     const p = this.players.get(playerId);
@@ -103,23 +164,24 @@ export class Room {
     let botIdx = 0;
     if (p.role === ROLE.SEEKER) {
       hiders = [];
-      while (hiders.length < Math.max(CONFIG.MIN_HIDERS, 2)) {
-        hiders.push({ id: `bot_${botIdx++}`, bot: true });
-      }
+      while (hiders.length < Math.max(CONFIG.MIN_HIDERS, 2)) hiders.push({ id: `bot_${botIdx++}`, bot: true });
     } else {
       hiders = [{ id: p.id, bot: false }];
-      while (hiders.length < CONFIG.MIN_HIDERS) {
-        hiders.push({ id: `bot_${botIdx++}`, bot: true });
-      }
+      while (hiders.length < CONFIG.MIN_HIDERS) hiders.push({ id: `bot_${botIdx++}`, bot: true });
     }
     this._beginPlaying(hiders, { debugMode: true });
   }
 
-  // 启动对局循环并通知各玩家
+  _resetToLobby() {
+    if (this.loop) { clearInterval(this.loop); this.loop = null; }
+    this.game = null;
+    this.state = 'lobby';
+    for (const p of this.players.values()) p.ready = false;
+  }
+
   _beginPlaying(hiders, opts = {}) {
     this.state = 'playing';
     this.game = new Game(hiders, opts);
-    // 开局立即套用已缓存的调试参数，避免首帧仍用默认 AI 数量/速度
     if (this.pendingDevCfg) this.game.setDevConfig(this.pendingDevCfg);
 
     for (const p of this.players.values()) {
@@ -141,6 +203,7 @@ export class Room {
     const dt = 1 / CONFIG.TICK_RATE;
     if (this.loop) clearInterval(this.loop);
     this.loop = setInterval(() => this.tick(dt), 1000 / CONFIG.TICK_RATE);
+    this.onChange?.();
   }
 
   tick(dt) {
@@ -162,11 +225,34 @@ export class Room {
     if (this.loop) { clearInterval(this.loop); this.loop = null; }
     this.state = 'ended';
     this.broadcast({ type: S2C.END, winner, reason, score: this.game ? this.game.score : 0, quota: this.game ? this.game.quota : 0 });
+    this.onChange?.();
   }
 
   restart() {
     this._resetToLobby();
     this.broadcastLobby();
+    this.onChange?.();
+  }
+
+  broadcastLobby() {
+    const cs = this.canStart();
+    const players = [...this.players.values()].map(p => ({
+      id: p.id,
+      name: p.name,
+      role: p.role,
+      ready: p.ready,
+      isHost: p.id === this.hostId,
+    }));
+    this.broadcast({
+      type: S2C.LOBBY,
+      roomId: this.id,
+      roomName: this.name,
+      hostId: this.hostId,
+      players,
+      state: this.state,
+      canStart: cs.ok,
+      canStartReason: cs.reason,
+    });
   }
 
   // ---------- 输入路由 ----------
@@ -175,7 +261,9 @@ export class Room {
     if (!p) return;
     const g = this.game;
     switch (msg.type) {
-      case 'ready': this.setReady(id); break;
+      case 'ready': this.toggleReady(id); break;
+      case 'switch_role': if (this.state === 'lobby') this.switchRole(id, msg.role); break;
+      case 'start_game': this.startGame(id); break;
       case 'solo_start':
         if (this.state === 'lobby' || this.state === 'ended') this.startSolo(id, msg.role);
         break;
@@ -196,6 +284,7 @@ export class Room {
   send(p, obj) {
     if (p.ws && p.ws.readyState === 1) p.ws.send(JSON.stringify(obj));
   }
+
   broadcast(obj) {
     const s = JSON.stringify(obj);
     for (const p of this.players.values()) if (p.ws && p.ws.readyState === 1) p.ws.send(s);

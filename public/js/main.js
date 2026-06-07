@@ -1,4 +1,4 @@
-// 入口：大厅流程、对局渲染循环、结算。
+// 入口：大厅流程（多房间）、对局渲染循环、结算。
 import { Net } from './net.js';
 import { Renderer } from './renderer.js';
 import { Input } from './input.js';
@@ -12,32 +12,21 @@ const renderer = new Renderer(canvas);
 const input = new Input(canvas);
 
 let role = null;
+let myPlayerId = null;
+let myHostId = null;
 let controller = null;
 let world = null;
 let running = false;
-let showPheromone = true;  // 信息素可视化开关
+let showPheromone = true;
 
-// ---- DOM ----
+// ---- DOM helpers ----
 const $ = (id) => document.getElementById(id);
-
-$('joinBtn').addEventListener('click', join);
-$('nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); });
-$('soloSeekerBtn').addEventListener('click', () => startSolo(ROLE.SEEKER));
-$('soloHiderBtn').addEventListener('click', () => startSolo(ROLE.HIDER));
-$('readyBtn').addEventListener('click', () => net.send({ type: 'ready' }));
-$('restartBtn').addEventListener('click', () => {
-  net.send({ type: 'restart' });
-  resetGameUi();
-  showScreen('lobby');
-});
 
 // ---- 开发者工具 ----
 
-// AI 数量滑块范围（与 index.html / Game.js 保持一致）
 const AI_ANT_COUNT_MIN = 10;
 const AI_ANT_COUNT_MAX = 200;
 
-// 默认 AI 参数值（与 config.js 保持一致）
 const DEV_DEFAULTS = {
   AI_ANT_COUNT: 30,
   AI_SPEED_BASE: 60,
@@ -51,7 +40,6 @@ const DEV_DEFAULTS = {
 
 const DEV_STORAGE_KEY = 'antsDemo_devCfg';
 
-/** 将当前滑块值序列化后存入 localStorage */
 function persistDevConfig() {
   const cfg = {
     AI_ANT_COUNT: parseInt($('devAntCount').value, 10),
@@ -69,12 +57,10 @@ function persistDevConfig() {
   localStorage.setItem(DEV_STORAGE_KEY, JSON.stringify(cfg));
 }
 
-/** 将已保存的强光跟随速度写入 world.tools，供客户端光束预测使用 */
 function applyBeamSpeedToWorld(beamSpeed) {
   if (world?.tools?.panic) world.tools.panic.beamSpeed = beamSpeed;
 }
 
-/** 从 localStorage 恢复滑块值（缺字段时回落到 DEV_DEFAULTS） */
 function restoreDevConfig() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(DEV_STORAGE_KEY) || '{}'); } catch (_) {}
@@ -104,10 +90,8 @@ function restoreDevConfig() {
   applyBeamSpeedToWorld(c.BEAM_SPEED);
 }
 
-// 页面加载时立即恢复
 restoreDevConfig();
 
-/** 读取所有滑块当前值，构造 dev_config 消息并发送给服务器 */
 function sendDevConfig() {
   persistDevConfig();
   net.send({
@@ -127,13 +111,12 @@ function sendDevConfig() {
   applyBeamSpeedToWorld(parseInt($('devBeamSpeed').value, 10));
 }
 
-/** 绑定单个滑块：实时更新显示值并以 16ms（约 1 帧）节流发送，保证修改下一帧即生效 */
 function bindSlider(id, valId, decimals) {
-  const input = $(id);
+  const inp = $(id);
   const valEl = $(valId);
   let timer = null;
-  input.addEventListener('input', () => {
-    const n = parseFloat(input.value);
+  inp.addEventListener('input', () => {
+    const n = parseFloat(inp.value);
     valEl.textContent = decimals === 0 ? String(Math.round(n)) : n.toFixed(decimals);
     clearTimeout(timer);
     timer = setTimeout(sendDevConfig, 16);
@@ -150,7 +133,6 @@ bindSlider('devFoodCount', 'devFoodCountVal', 0);
 bindSlider('devFoodCapacity', 'devFoodCapacityVal', 0);
 bindSlider('devBeamSpeed', 'devBeamSpeedVal', 0);
 
-/** 恢复所有滑块到默认值，清除本地存储并同步服务器 */
 $('devReset').addEventListener('click', () => {
   localStorage.removeItem(DEV_STORAGE_KEY);
   $('devAntCount').value = DEV_DEFAULTS.AI_ANT_COUNT;
@@ -174,12 +156,10 @@ $('devReset').addEventListener('click', () => {
   sendDevConfig();
 });
 
-/** 开发者面板内的信息素复选框联动 HUD 按钮 */
 $('devPheroCheck').addEventListener('change', () => {
   setPheroVisible($('devPheroCheck').checked);
 });
 
-/** 统一设置信息素可见状态，同步 HUD 按钮与面板复选框 */
 function setPheroVisible(visible) {
   showPheromone = visible;
   $('devPheroCheck').checked = visible;
@@ -189,83 +169,186 @@ function setPheroVisible(visible) {
   btn.classList.toggle('phero-off', !visible);
 }
 
-/** HUD 信息素按钮 */
 $('pheroToggleBtn').addEventListener('click', () => setPheroVisible(!showPheromone));
 
-/** DEV 按钮 / 反引号键 切换面板 */
-function toggleDevPanel() {
-  $('devPanel').classList.toggle('hidden');
-}
+function toggleDevPanel() { $('devPanel').classList.toggle('hidden'); }
 $('devPanelBtn').addEventListener('click', toggleDevPanel);
 $('devClose').addEventListener('click', () => $('devPanel').classList.add('hidden'));
 window.addEventListener('keydown', (e) => {
   if (e.key === '`' || e.key === '~') { e.preventDefault(); toggleDevPanel(); }
 });
 
-// 确保 WebSocket 已连接
+// ---- 连接 ----
+
 async function ensureConnected() {
   if (!net.ws) await net.connect();
 }
 
-function setLobbyLocked(locked) {
-  $('joinBtn').disabled = locked;
-  $('nameInput').disabled = locked;
-  $('soloSeekerBtn').disabled = locked;
-  $('soloHiderBtn').disabled = locked;
+// ---- 房间浏览 ----
+
+let roomNameCustomized = false;
+let syncingRoomName = false;
+
+/** 根据昵称生成默认房间名 */
+function defaultRoomName(name) {
+  return `${name || '玩家'}的房间`;
 }
 
-async function join() {
+/** 未自定义时，将房间名同步为「昵称的房间」 */
+function syncAutoRoomName() {
+  if (roomNameCustomized) return;
+  const name = $('nameInput').value.trim();
+  syncingRoomName = true;
+  $('roomNameInput').value = name ? defaultRoomName(name) : '';
+  syncingRoomName = false;
+}
+
+/** 渲染房间列表（表格式） */
+function renderRoomList(rooms) {
+  const el = $('roomList');
+  if (!rooms || rooms.length === 0) {
+    el.innerHTML = '<p class="empty-hint">暂无房间，创建一个吧</p>';
+    return;
+  }
+  el.innerHTML = '';
+  for (const r of rooms) {
+    const item = document.createElement('div');
+    item.className = 'room-item';
+    const stateText = r.state === 'playing' ? '对局中' : r.state === 'ended' ? '已结束' : '等待中';
+    const stateClass = r.state === 'playing' ? 'playing' : '';
+    item.innerHTML = `
+      <span class="room-item-name col-name">${escapeHtml(r.name)}</span>
+      <span class="col-host">${escapeHtml(r.hostName)}</span>
+      <span class="col-count">${r.count}</span>
+      <span class="room-item-state col-state ${stateClass}">${stateText}</span>
+      <span class="col-action">
+        <button class="join-btn" ${r.state === 'playing' ? 'disabled title="对局进行中"' : ''}>加入</button>
+      </span>
+    `;
+    item.querySelector('.join-btn').addEventListener('click', () => joinRoom(r.id));
+    el.appendChild(item);
+  }
+}
+
+$('nameInput').addEventListener('input', syncAutoRoomName);
+$('roomNameInput').addEventListener('input', () => {
+  if (syncingRoomName) return;
+  roomNameCustomized = true;
+});
+$('roomNameInput').addEventListener('blur', () => {
+  if (!$('roomNameInput').value.trim()) {
+    roomNameCustomized = false;
+    syncAutoRoomName();
+  }
+});
+
+$('createRoomBtn').addEventListener('click', createRoom);
+$('nameInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') createRoom(); });
+
+async function createRoom() {
   await ensureConnected();
-  if ($('joinBtn').disabled) return;
   const name = $('nameInput').value.trim() || '玩家';
-  net.send({ type: 'join', name });
-  setLobbyLocked(true);
-  $('lobbyInfo').classList.remove('hidden');
+  const roomName = $('roomNameInput').value.trim() || `${name}的房间`;
+  net.send({ type: 'create_room', name, roomName });
 }
 
-// 单机调试：选角色后立即开局
+async function joinRoom(roomId) {
+  await ensureConnected();
+  const name = $('nameInput').value.trim() || '玩家';
+  net.send({ type: 'join_room', name, roomId });
+}
+
+// ---- 单机调试 ----
+
+$('soloSeekerBtn').addEventListener('click', () => startSolo(ROLE.SEEKER));
+$('soloHiderBtn').addEventListener('click', () => startSolo(ROLE.HIDER));
+
 async function startSolo(soloRole) {
   await ensureConnected();
-  if ($('soloSeekerBtn').disabled) return;
   const name = $('nameInput').value.trim() || '调试';
-  net.send({ type: 'join', name });
-  net.send({ type: 'solo_start', role: soloRole });
-  setLobbyLocked(true);
+  net.send({ type: 'solo_start', name, role: soloRole });
 }
 
-function resetGameUi() {
-  setLobbyLocked(false);
-  running = false;
-  controller = null;
-  $('lobbyInfo').classList.add('hidden');
-  $('toolbar').classList.add('hidden');
-  $('seekerHint').classList.add('hidden');
-  $('hiderHint').classList.add('hidden');
-  updateDevAntStats(null);
-}
+// ---- 房间内操作 ----
+
+$('leaveRoomBtn').addEventListener('click', () => {
+  net.send({ type: 'leave_room' });
+  showLobbyView('browser');
+});
+
+$('readyBtn').addEventListener('click', () => net.send({ type: 'ready' }));
+
+$('switchSeekerBtn').addEventListener('click', () => net.send({ type: 'switch_role', role: ROLE.SEEKER }));
+$('switchHiderBtn').addEventListener('click', () => net.send({ type: 'switch_role', role: ROLE.HIDER }));
+
+$('startGameBtn').addEventListener('click', () => net.send({ type: 'start_game' }));
+
+// ---- 结算 ----
+
+$('restartBtn').addEventListener('click', () => {
+  net.send({ type: 'restart' });
+  // 结算后回大厅会收到 lobby 消息（room 还在），直接回到 room 视图
+  resetGameUi();
+  showScreen('lobby');
+  showLobbyView('room');
+});
+
+// ---- 消息处理 ----
+
+net.on('room_list', (m) => {
+  renderRoomList(m.rooms);
+});
 
 net.on('welcome', (m) => {
+  myPlayerId = m.playerId;
+  myHostId = m.hostId;
   role = m.role;
-  $('roleLine').innerHTML = role === ROLE.SEEKER
-    ? '你的角色：<span class="role-seeker">搜寻者</span>（上帝视角，找出混入的隐藏者）'
-    : '你的角色：<span class="role-hider">隐藏者</span>（伪装成蚂蚁，搬运食物回巢）';
+  $('roomTitle').textContent = m.roomName;
+  updateMyRoleLine();
+  showLobbyView('room');
 });
 
 net.on('lobby', (m) => {
+  myHostId = m.hostId;
+  $('roomTitle').textContent = m.roomName;
+
+  // 玩家列表
   const list = $('playerList');
   list.innerHTML = '';
   for (const p of m.players) {
     const li = document.createElement('li');
-    const r = p.role === ROLE.SEEKER ? '搜寻者' : '隐藏者';
-    li.innerHTML = `<span>${escapeHtml(p.name)} · ${r}</span><span>${p.ready ? '✓ 已准备' : '…'}</span>`;
+    const r = p.role === ROLE.SEEKER
+      ? '<span class="role-seeker">搜寻者</span>'
+      : '<span class="role-hider">隐藏者</span>';
+    const hostTag = p.isHost ? ' 👑' : '';
+    const readyTag = p.ready ? '✓ 已准备' : '…';
+    li.innerHTML = `<span>${escapeHtml(p.name)}${hostTag} · ${r}</span><span>${readyTag}</span>`;
     list.appendChild(li);
   }
+
+  // 更新自己的角色（可能被服务器变更）
+  const me = m.players.find(p => p.id === myPlayerId);
+  if (me) {
+    role = me.role;
+    updateMyRoleLine();
+    // 切换角色按钮高亮当前角色
+    $('switchSeekerBtn').classList.toggle('active-role', role === ROLE.SEEKER);
+    $('switchHiderBtn').classList.toggle('active-role', role === ROLE.HIDER);
+    // 准备按钮文字
+    $('readyBtn').textContent = me.ready ? '取消准备' : '准备';
+  }
+
+  // 仅房主显示开始按钮
+  const isHost = myPlayerId === m.hostId;
+  $('startGameBtn').classList.toggle('hidden', !isHost);
+  $('startGameBtn').disabled = !m.canStart;
+  $('canStartHint').textContent = isHost && !m.canStart ? m.canStartReason : '';
 });
 
 net.on('start', (m) => {
   role = m.role;
   world = m.world;
-  restoreDevConfig(); // 将本地保存的强光跟随速度等参数写入 world
+  restoreDevConfig();
   showScreen('game');
   $('roleTag').textContent = role === ROLE.SEEKER ? '搜寻者' : '隐藏者';
   $('roleTag').className = 'hud-item ' + (role === ROLE.SEEKER ? 'role-seeker' : 'role-hider');
@@ -277,7 +360,7 @@ net.on('start', (m) => {
     $('toolbar').classList.add('hidden');
   }
   running = true;
-  sendDevConfig(); // 将本地已保存的调试参数同步到新对局
+  sendDevConfig();
   requestAnimationFrame(loop);
 });
 
@@ -297,12 +380,12 @@ net.on('end', (m) => {
 });
 
 // ---- 渲染循环 ----
+
 let lastT = performance.now();
 function loop(now) {
   if (!running) return;
   const dt = Math.min(0.05, (now - lastT) / 1000);
   lastT = now;
-
   const snap = net.interpolated();
   if (snap && controller) {
     const opts = controller.update(snap, dt);
@@ -320,7 +403,6 @@ function updateHud(snap) {
   updateDevAntStats(snap);
 }
 
-/** 更新调试面板中的蚂蚁数量统计（AI / 隐藏者 / 总数） */
 function updateDevAntStats(snap) {
   if (!snap?.antStats) {
     $('devStatAi').textContent = running ? '…' : '—';
@@ -334,14 +416,15 @@ function updateDevAntStats(snap) {
   $('devStatTotal').textContent = total;
 }
 
-// ---- 事件提示 ----
+// ---- 工具事件 ----
+
 function handleEvent(e) {
   switch (e.t) {
-    case 'mark_hit': toast('标记命中！隐藏者被淘汰', 'good'); break;
-    case 'mark_miss': toast('误标记！工具锁死中', 'bad'); break;
+    case 'mark_hit':   toast('标记命中！隐藏者被淘汰', 'good'); break;
+    case 'mark_miss':  toast('误标记！工具锁死中', 'bad'); break;
     case 'food_pickup': if (role === ROLE.HIDER) toast('拿到食物，送回巢穴', 'good'); break;
-    case 'score': toast(`食物已送达 (${e.score})`, 'good'); break;
-    case 'tool': if (role === ROLE.SEEKER) toast(`使用了工具`, ''); break;
+    case 'score':      toast(`食物已送达 (${e.score})`, 'good'); break;
+    case 'tool':       if (role === ROLE.SEEKER) toast('使用了工具', ''); break;
   }
 }
 
@@ -354,10 +437,38 @@ function toast(text, kind) {
   setTimeout(() => el.remove(), 2200);
 }
 
+// ---- UI 切换 ----
+
 function showScreen(name) {
   $('lobby').classList.toggle('hidden', name !== 'lobby');
   $('game').classList.toggle('hidden', name !== 'game');
   $('endScreen').classList.toggle('hidden', name !== 'end');
 }
 
-function escapeHtml(s) { return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+/** 大厅内子视图切换：'browser' | 'room' */
+function showLobbyView(view) {
+  $('browserView').classList.toggle('hidden', view !== 'browser');
+  $('roomView').classList.toggle('hidden', view !== 'room');
+}
+
+function updateMyRoleLine() {
+  $('myRoleLine').innerHTML = role === ROLE.SEEKER
+    ? '你的角色：<span class="role-seeker">搜寻者</span>（上帝视角，找出混入的隐藏者）'
+    : '你的角色：<span class="role-hider">隐藏者</span>（伪装成蚂蚁，搬运食物回巢）';
+}
+
+function resetGameUi() {
+  running = false;
+  controller = null;
+  $('toolbar').classList.add('hidden');
+  $('seekerHint').classList.add('hidden');
+  $('hiderHint').classList.add('hidden');
+  updateDevAntStats(null);
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+// ---- 初始化：建立 WS 连接，接收初始房间列表 ----
+ensureConnected();

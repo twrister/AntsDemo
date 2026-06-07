@@ -60,6 +60,89 @@ html, body {
 }
 .hint { font-size: 12px; color: #8a7c60; margin-top: 14px; line-height: 1.5; }
 
+/* 宽面板（多房间大厅） */
+.wide-panel { width: 480px; max-height: 90vh; overflow-y: auto; text-align: left; }
+.wide-panel h1 { text-align: center; }
+.wide-panel .subtitle { text-align: center; }
+
+/* 房间浏览 */
+.section-header { margin: 16px 0 6px; }
+.section-title { font-size: 13px; color: #9a8b6e; letter-spacing: 1px; }
+
+.room-list-wrap {
+  background: #1c1813; border: 1px solid #4a3d28; border-radius: 8px; overflow: hidden;
+}
+.room-list-head,
+.room-item {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 40px 52px 52px;
+  align-items: center; gap: 6px; padding: 0 10px;
+}
+.room-list-head {
+  padding: 7px 10px; font-size: 11px; color: #7a6e55; letter-spacing: 1px;
+  background: #252018; border-bottom: 1px solid #3a3020;
+}
+.room-list-head .col-action { text-align: center; }
+.col-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-host { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #8a7c60; }
+.col-count, .col-state, .col-action { text-align: center; }
+
+.room-list { display: flex; flex-direction: column; min-height: 40px; max-height: 220px; overflow-y: auto; }
+.room-list .empty-hint { grid-column: 1 / -1; }
+.empty-hint { font-size: 13px; color: #5a5040; text-align: center; padding: 16px 0; }
+.room-item {
+  height: 30px; border-bottom: 1px solid #2e2820; font-size: 13px; line-height: 1;
+}
+.room-item:last-child { border-bottom: none; }
+.room-item-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.room-item-state {
+  font-size: 11px; color: #9a8b6e;
+}
+.room-item-state.playing { color: var(--accent); }
+.room-item .join-btn {
+  background: #2b2419; border: 1px solid #4a3d28; border-radius: 4px;
+  color: var(--text); font-size: 11px; font-weight: 500;
+  padding: 2px 6px; cursor: pointer; width: auto; min-width: 40px;
+  letter-spacing: 0; line-height: 1.2;
+}
+.room-item .join-btn:hover { border-color: var(--accent); color: var(--accent); filter: none; }
+.room-item .join-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+.create-section { margin-top: 10px; }
+.create-section button { width: 100%; padding: 11px; font-size: 15px; letter-spacing: 1px; }
+
+/* 房间内视图 */
+.room-header { text-align: center; margin-bottom: 16px; }
+.room-header h2 { font-size: 20px; color: var(--accent); letter-spacing: 2px; }
+
+.leave-row { margin-top: 8px; }
+#leaveRoomBtn {
+  width: 100%; padding: 11px; font-size: 15px; letter-spacing: 1px;
+  border: none; border-radius: 8px; font-weight: 700; cursor: pointer;
+  background: #4a2820; color: #e8a090; transition: filter .15s;
+}
+#leaveRoomBtn:hover { background: #5c3228; color: #f0b8ac; filter: none; }
+
+#myRoleLine { font-size: 15px; margin-bottom: 12px; }
+
+.role-switch-row { display: flex; gap: 10px; margin: 12px 0; }
+.role-btn {
+  flex: 1; padding: 9px 8px; border-radius: 8px; border: 1px solid #4a3d28;
+  background: #1c1813; font-size: 13px; font-weight: 600; cursor: pointer;
+  color: var(--text); letter-spacing: 0; width: auto; transition: all .15s;
+}
+.role-btn.active-role { opacity: 0.4; cursor: not-allowed; }
+.seeker-btn:not(.active-role):hover { border-color: var(--accent); color: var(--accent); }
+.hider-btn:not(.active-role):hover { border-color: var(--hider); color: var(--hider); }
+
+.action-row { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.action-row button { width: 100%; padding: 11px; font-size: 15px; letter-spacing: 1px; }
+#startGameBtn { background: #2b5c2e; color: #a0e8a4; }
+#startGameBtn:not(:disabled):hover { background: #356938; filter: none; }
+
+.name-row { margin-bottom: 0; display: flex; flex-direction: column; gap: 8px; }
+.name-row input { width: 100%; margin-bottom: 0; padding: 10px 12px; font-size: 14px; }
+
 .solo-section {
   margin-top: 20px;
   padding-top: 18px;

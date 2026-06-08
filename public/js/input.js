@@ -34,13 +34,15 @@ export class Input {
    * @param {number} antX 蚂蚁世界 X
    * @param {number} antY 蚂蚁世界 Y
    * @param {{ x: number, y: number, zoom?: number }} cam 镜头
+   * @param {{ width: number, height: number, offsetX: number, offsetY: number }|null} viewport 4:3 视口
    */
-  hiderMoveVector(antX, antY, cam) {
+  hiderMoveVector(antX, antY, cam, viewport = null) {
     if (!this.mouse.leftDown) return { dx: 0, dy: 0 };
-    const W = this.canvas.width, H = this.canvas.height;
     const zoom = cam.zoom || 1;
-    const wx = cam.x + (this.mouse.x - W / 2) / zoom;
-    const wy = cam.y + (this.mouse.y - H / 2) / zoom;
+    const cx = viewport ? viewport.offsetX + viewport.width / 2 : this.canvas.width / 2;
+    const cy = viewport ? viewport.offsetY + viewport.height / 2 : this.canvas.height / 2;
+    const wx = cam.x + (this.mouse.x - cx) / zoom;
+    const wy = cam.y + (this.mouse.y - cy) / zoom;
     const dx = wx - antX;
     const dy = wy - antY;
     // 鼠标贴近蚂蚁时视为静止，便于拾取

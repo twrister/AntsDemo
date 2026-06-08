@@ -48,6 +48,10 @@ export const CONFIG = {
   // 搜寻者视野
   SEEKER_VIEW_RATIO: 0.6,   // 屏幕 60%
 
+  // 隐藏者视野：4:3 视口 (世界像素)，客户端自适应 zoom 保持各端可见范围一致
+  HIDER_VIEW_WIDTH: 960,
+  HIDER_VIEW_HEIGHT: 720,
+
   // AI 行为铁律
   AI_PAUSE_MAX: 0.8,        // 非待机状态最长停顿 (秒)
   AI_TURN_SMOOTH: 0.3,      // 转弯减速曲线 (秒)

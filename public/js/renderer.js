@@ -20,7 +20,7 @@ export class Renderer {
    * 渲染一帧。
    * @param snap 插值后的世界快照
    * @param cam  镜头 { x, y, zoom } —— 世界坐标中心点
-   * @param opts { role, world, time, viewRadius, lightBeam, sniffBeam, toolPreview }
+   * @param opts { role, world, time, viewRadius, lightBeam, sniffBeam, toolPreview, viewport }
    */
   draw(snap, cam, opts) {
     const ctx = this.ctx;
@@ -31,9 +31,21 @@ export class Renderer {
     if (snap.phero) this._cachedPhero = snap.phero;
 
     const zoom = cam.zoom || 1;
-    ctx.save();
-    // 世界 -> 屏幕变换：以 cam 为中心
-    ctx.translate(W / 2, H / 2);
+    const vp = opts.role === ROLE.HIDER && opts.viewport ? opts.viewport : null;
+    if (vp) {
+      ctx.fillStyle = '#1a1410';
+      ctx.fillRect(0, 0, W, H);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(vp.offsetX, vp.offsetY, vp.width, vp.height);
+      ctx.clip();
+    } else {
+      ctx.save();
+    }
+    // 世界 -> 屏幕变换：以视口中心为锚点
+    const cx = vp ? vp.offsetX + vp.width / 2 : W / 2;
+    const cy = vp ? vp.offsetY + vp.height / 2 : H / 2;
+    ctx.translate(cx, cy);
     ctx.scale(zoom, zoom);
     ctx.translate(-cam.x, -cam.y);
 

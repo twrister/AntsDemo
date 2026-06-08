@@ -1,5 +1,5 @@
 // 隐藏者控制器：移动输入、拾取引导、镜头跟随自身蚂蚁；淘汰后切全屏观战。
-import { computeFitZoom } from './const.js';
+import { computeFitZoom, computeHiderViewport, computeHiderZoom } from './const.js';
 
 export class HiderController {
   constructor({ canvas, input, net, world, antId }) {
@@ -9,7 +9,9 @@ export class HiderController {
     this.world = world;
     this.antId = antId;
     this.baseZoom = computeFitZoom(canvas, world);
-    this.cam = { x: world.w / 2, y: world.h / 2, zoom: 1.5 };
+    this.viewport = computeHiderViewport(canvas);
+    this.hiderZoom = computeHiderZoom(canvas, world);
+    this.cam = { x: world.w / 2, y: world.h / 2, zoom: this.hiderZoom };
     this._lastMove = { dx: 0, dy: 0 };
     this._lastSprint = false;
     this._sendTimer = 0;
@@ -19,10 +21,15 @@ export class HiderController {
     this._hintEl.classList.remove('hidden');
     this._onResize = () => {
       this.baseZoom = computeFitZoom(this.canvas, this.world);
-      if (!this._spectator) return;
-      this.cam.zoom = this.baseZoom;
-      this.cam.x = this.world.w / 2;
-      this.cam.y = this.world.h / 2;
+      this.viewport = computeHiderViewport(this.canvas);
+      this.hiderZoom = computeHiderZoom(this.canvas, this.world);
+      if (this._spectator) {
+        this.cam.zoom = this.baseZoom;
+        this.cam.x = this.world.w / 2;
+        this.cam.y = this.world.h / 2;
+        return;
+      }
+      this.cam.zoom = this.hiderZoom;
     };
     window.addEventListener('resize', this._onResize);
   }
@@ -64,6 +71,19 @@ export class HiderController {
     return { x: this._displayBeam.x, y: this._displayBeam.y, radius: server.radius };
   }
 
+  /** 限制镜头中心，避免 4:3 视口露出地图外空白 */
+  _clampCam() {
+    const halfW = this.viewport.width / (2 * this.cam.zoom);
+    const halfH = this.viewport.height / (2 * this.cam.zoom);
+    this.cam.x = this._clampAxis(this.cam.x, this.world.w, halfW);
+    this.cam.y = this._clampAxis(this.cam.y, this.world.h, halfH);
+  }
+
+  _clampAxis(pos, size, halfVisible) {
+    if (halfVisible >= size / 2) return size / 2;
+    return Math.max(halfVisible, Math.min(size - halfVisible, pos));
+  }
+
   /** 限速移向目标点（像素/秒） */
   _moveToward(pos, target, maxMove) {
     const dx = target.x - pos.x;
@@ -84,18 +104,19 @@ export class HiderController {
     // 淘汰后固定全图观战（与搜寻者默认缩放一致），不再接收操作
     if (snap.selfEliminated) {
       this._enterSpectator();
-      return { cam: this.cam, lightBeam: this._smoothLightBeam(snap, dt), spectator: true };
+      return { cam: this.cam, lightBeam: this._smoothLightBeam(snap, dt), spectator: true, viewport: null };
     }
 
     // 镜头跟随自身蚂蚁
     if (self) {
       this.cam.x += (self.x - this.cam.x) * 0.15;
       this.cam.y += (self.y - this.cam.y) * 0.15;
+      this._clampCam();
     }
 
     // 移动向量：按住左键，朝鼠标方向移动
     const { dx, dy } = self
-      ? this.input.hiderMoveVector(self.x, self.y, this.cam)
+      ? this.input.hiderMoveVector(self.x, self.y, this.cam, this.viewport)
       : { dx: 0, dy: 0 };
     // 冲刺：按住空格触发加速倍率
     const sprint = !!this.input.keys['Space'];
@@ -113,6 +134,10 @@ export class HiderController {
       this._lastSprint = sprint;
     }
 
-    return { cam: this.cam, lightBeam: this._smoothLightBeam(snap, dt) };
+    return {
+      cam: this.cam,
+      lightBeam: this._smoothLightBeam(snap, dt),
+      viewport: this.viewport,
+    };
   }
 }

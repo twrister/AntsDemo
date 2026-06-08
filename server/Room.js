@@ -249,6 +249,8 @@ export class Room {
           w: CONFIG.WORLD_W,
           h: CONFIG.WORLD_H,
           viewRatio: CONFIG.SEEKER_VIEW_RATIO,
+          hiderViewWidth: CONFIG.HIDER_VIEW_WIDTH,
+          hiderViewHeight: CONFIG.HIDER_VIEW_HEIGHT,
           tools: this._toolsForClient(this.game),
           debugMode: !!opts.debugMode,
           noToolCd: !!opts.noToolCd,

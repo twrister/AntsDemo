@@ -290,17 +290,22 @@ export class Renderer {
   }
 
   /**
-   * 绘制假食物：本体与真食物相同；仅搜寻者叠加剩余时长圆环。
+   * 绘制假食物：本体与真食物相同；搜寻者叠加剩余时长圆环，玩家完成取食交互后红色警告高亮。
    */
   _drawFakeFood(ctx, food, opts) {
     if (!food?.length) return;
     const isSeeker = opts.role === ROLE.SEEKER && !opts.spectator;
     const lifetime = opts.world?.tools?.fakeFood?.lifetime ?? 40;
+    const warnDuration = opts.world?.tools?.fakeFood?.warnDuration ?? 1.5;
     for (const f of food) {
       this._drawFoodPile(ctx, f);
       if (!isSeeker) continue;
       const ratio = (f.capacity > 0) ? f.amount / f.capacity : 0;
       const r = 4 + ratio * 8;
+      const warnLeft = f.warnLeft ?? 0;
+      if (warnLeft > 0) {
+        this._drawFakeFoodWarn(ctx, f.x, f.y, r, warnLeft, warnDuration, opts.time);
+      }
       const lifeLeft = f.lifeLeft ?? lifetime;
       const lifeRatio = lifetime > 0 ? Math.max(0, Math.min(1, lifeLeft / lifetime)) : 0;
       if (lifeRatio <= 0) continue;
@@ -311,6 +316,26 @@ export class Renderer {
       ctx.lineWidth = 2.5;
       ctx.stroke();
     }
+  }
+
+  /** 搜寻者视角：假食物被玩家完成取食交互后的红色脉冲警告圈 */
+  _drawFakeFoodWarn(ctx, x, y, foodR, warnLeft, warnDuration, time) {
+    const intensity = warnDuration > 0 ? Math.min(1, warnLeft / warnDuration) : 0;
+    const pulse = 0.7 + 0.3 * Math.sin(time / 60);
+    const ringR = foodR + 18;
+    const grad = ctx.createRadialGradient(x, y, foodR, x, y, ringR + 10);
+    grad.addColorStop(0, `rgba(255,90,60,${(0.35 * pulse * intensity).toFixed(3)})`);
+    grad.addColorStop(0.55, `rgba(255,50,40,${(0.16 * pulse * intensity).toFixed(3)})`);
+    grad.addColorStop(1, 'rgba(255,40,30,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(x, y, ringR + 10, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x, y, ringR, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,80,50,${(0.8 * pulse * intensity).toFixed(3)})`;
+    ctx.lineWidth = 3;
+    ctx.stroke();
   }
 
   /** 绘制单个食物堆：按剩余量/容量比例决定圆点大小与颜色深浅 */

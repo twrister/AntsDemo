@@ -612,11 +612,12 @@ export class Game {
     }
 
     const actionTime = CONFIG.FOOD_ACTION_TIME;
+    const warnDur = CONFIG.TOOLS.fakeFood.warnDuration ?? 1.5;
     ant.pickupProgress += dt;
     if (ant.pickupProgress < actionTime) return true;
 
     ant.pickupProgress = 0;
-    const warnDur = CONFIG.TOOLS.fakeFood.warnDuration ?? 1.5;
+    // 交互完成后才触发警告高亮，取食过程中搜寻者不可见
     src.warnUntil = this.now + warnDur;
     this.events.push({ t: 'fake_food_warn', x: src.x, y: src.y, antId: ant.id });
     return false;

@@ -165,6 +165,19 @@ export class Game {
     return this.devCfg.BEAM_SPEED ?? CONFIG.TOOLS.panic.beamSpeed ?? 280;
   }
 
+  /** 误标后标记冷却 (秒)，开发者工具可热改 */
+  _markCooldownSec() {
+    if (this.devCfg.MARK_COOLDOWN !== undefined) {
+      return Math.max(0, Math.min(5, +this.devCfg.MARK_COOLDOWN));
+    }
+    return CONFIG.MARK_COOLDOWN;
+  }
+
+  /** 误标 AI 后进入标记功能冷却 */
+  _applyMarkCooldown() {
+    this.markCooldownUntil = this.now + this._markCooldownSec();
+  }
+
   /** 嗅探圈半径（像素，开发者工具可热改） */
   _sniffRadius() {
     return this.devCfg.SNIFF_RADIUS ?? CONFIG.TOOLS.sniff.radius ?? 100;
@@ -370,8 +383,7 @@ export class Game {
     } else {
       // 误标 AI：触发逃窜态短暂打乱画面，并进入标记冷却
       triggerFlee(ant, CONFIG.MISMARK_FLEE_DURATION, { x: ant.x, y: ant.y });
-      const { min, max } = CONFIG.MARK_COOLDOWN;
-      this.markCooldownUntil = this.now + rand(min, max);
+      this._applyMarkCooldown();
       this.markMisses++;
       this.events.push({ t: 'mark_miss', x: ant.x, y: ant.y, antId });
     }
@@ -954,7 +966,7 @@ export class Game {
   /**
    * 更新开发者调试参数（运行时热修改 AI 行为，不重启对局）。
    * 所有参数下一帧即生效（speed/turn 逐帧读取；ant count 立即增删蚂蚁）。
-   * 支持字段：AI_SPEED_BASE / AI_TURN_SMOOTH / AI_SOCIAL_CHANCE / AI_SPEED（含 carry / carryRich）/ AI_ANT_COUNT / FOOD_COUNT / FOOD_CAPACITY / BEAM_SPEED / SNIFF_RADIUS / TOOL_CD / DEBUG_NO_CD
+   * 支持字段：AI_SPEED_BASE / AI_TURN_SMOOTH / AI_SOCIAL_CHANCE / AI_SPEED（含 carry / carryRich）/ AI_ANT_COUNT / FOOD_COUNT / FOOD_CAPACITY / BEAM_SPEED / SNIFF_RADIUS / TOOL_CD / MARK_COOLDOWN / DEBUG_NO_CD
    */
   setDevConfig(params) {
     let toolCdChanged = false;
@@ -987,6 +999,12 @@ export class Game {
         this.devCfg.TOOL_CD[tool] = Math.max(0, Math.min(30, +cd));
       }
       toolCdChanged = true;
+    }
+    if (params.MARK_COOLDOWN !== undefined) {
+      const raw = typeof params.MARK_COOLDOWN === 'number'
+        ? params.MARK_COOLDOWN
+        : (params.MARK_COOLDOWN?.min ?? params.MARK_COOLDOWN?.max ?? this.devCfg.MARK_COOLDOWN ?? CONFIG.MARK_COOLDOWN);
+      this.devCfg.MARK_COOLDOWN = Math.max(0, Math.min(5, +raw));
     }
     if ((toolCdChanged || params.DEBUG_NO_CD !== undefined) && !this._toolsUsed) {
       this._resetStartingToolCooldowns();

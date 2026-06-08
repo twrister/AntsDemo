@@ -29,5 +29,8 @@ export function setGlobalDevConfig(msg) {
   if (rest.TOOL_CD) {
     cfg.TOOL_CD = { ...(cfg.TOOL_CD || {}), ...rest.TOOL_CD };
   }
+  if (rest.MARK_COOLDOWN !== undefined) {
+    cfg.MARK_COOLDOWN = rest.MARK_COOLDOWN;
+  }
   return cfg;
 }

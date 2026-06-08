@@ -140,7 +140,8 @@ export class SeekerController {
 
   /** 收到误标事件后立即锁定标记，避免等下一帧快照 */
   onMarkMiss() {
-    this._localMarkCdUntil = Math.max(this._localMarkCdUntil, performance.now() + 5000);
+    const cd = this.world?.markCooldown ?? 3;
+    this._localMarkCdUntil = Math.max(this._localMarkCdUntil, performance.now() + cd * 1000);
   }
 
   /** 点击放置类工具：在地图落点生成实体（如假食物） */

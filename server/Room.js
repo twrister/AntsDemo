@@ -210,6 +210,11 @@ export class Room {
     return tools;
   }
 
+  /** 误标标记冷却 (秒)，供客户端本地预判 */
+  _markCooldownForClient(game) {
+    return game?._markCooldownSec?.() ?? CONFIG.MARK_COOLDOWN;
+  }
+
   /** 全局调参热更新：进行中对局立即 setDevConfig，并同步客户端工具展示 */
   applyGlobalDevConfig(msg) {
     const params = stripDevConfigMsg(msg);
@@ -225,6 +230,7 @@ export class Room {
     const payload = {
       type: S2C.DEV_TOOLS,
       tools: this._toolsForClient(this.game),
+      markCooldown: this._markCooldownForClient(this.game),
       noToolCd: this.game.noToolCd,
     };
     for (const p of this.players.values()) this.send(p, payload);
@@ -252,6 +258,7 @@ export class Room {
           hiderViewWidth: CONFIG.HIDER_VIEW_WIDTH,
           hiderViewHeight: CONFIG.HIDER_VIEW_HEIGHT,
           tools: this._toolsForClient(this.game),
+          markCooldown: this._markCooldownForClient(this.game),
           debugMode: !!opts.debugMode,
           noToolCd: !!opts.noToolCd,
           matchDuration,

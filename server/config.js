@@ -40,7 +40,7 @@ export const CONFIG = {
   /** 调试模式下搜寻者工具是否无 CD（标记冷却不受影响）；默认关闭 */
   DEBUG_NO_CD: false,
 
-  MARK_COOLDOWN: { min: 3, max: 5 }, // 误标记后标记功能冷却 (秒)
+  MARK_COOLDOWN: 3, // 误标记后标记功能冷却 (秒)，开发者工具可热改 0–5
   MISMARK_FLEE_DURATION: 1.2,          // 误标 AI 逃窜时长 (秒)
   HIDER_LIVES: 3,                      // 每位隐藏者默认生命数，被标中一次减 1，归零淘汰
   HIDER_MARK_DURATION: 10,             // 隐藏者被标中后冻结时长 (秒)，有剩余生命则在巢穴复活

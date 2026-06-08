@@ -41,6 +41,10 @@ const TOOL_CD_META = {
   fakeFood: { label: '假食物 CD', min: 0, max: 60, default: 25 },
 };
 
+const MARK_COOLDOWN_MIN = 0;
+const MARK_COOLDOWN_MAX = 5;
+const MARK_COOLDOWN_DEFAULT = 3;
+
 const DEV_DEFAULTS = {
   AI_ANT_COUNT: 30,
   AI_SPEED_BASE: 60,
@@ -51,6 +55,7 @@ const DEV_DEFAULTS = {
   FOOD_CAPACITY: 60,
   BEAM_SPEED: 280,
   SNIFF_RADIUS: 100,
+  MARK_COOLDOWN: MARK_COOLDOWN_DEFAULT,
   TOOL_CD: Object.fromEntries(
     Object.entries(TOOL_CD_META).map(([k, m]) => [k, m.default]),
   ),
@@ -66,6 +71,26 @@ function readToolCdFromDom() {
     if (inp) toolCd[key] = parseInt(inp.value, 10);
   }
   return toolCd;
+}
+
+/** 归一化误标冷却（兼容旧版 min/max 区间配置） */
+function normalizeMarkCooldown(v) {
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    return Math.max(MARK_COOLDOWN_MIN, Math.min(MARK_COOLDOWN_MAX, Math.round(v)));
+  }
+  if (v && typeof v === 'object') {
+    const n = v.min ?? v.max ?? MARK_COOLDOWN_DEFAULT;
+    return Math.max(MARK_COOLDOWN_MIN, Math.min(MARK_COOLDOWN_MAX, Math.round(+n)));
+  }
+  return MARK_COOLDOWN_DEFAULT;
+}
+
+function readMarkCooldownFromDom() {
+  return normalizeMarkCooldown(parseInt($('devMarkCd')?.value ?? MARK_COOLDOWN_DEFAULT, 10));
+}
+
+function applyMarkCooldownToWorld(markCooldown) {
+  if (world) world.markCooldown = normalizeMarkCooldown(markCooldown);
 }
 
 function persistDevConfig() {
@@ -85,6 +110,7 @@ function persistDevConfig() {
     BEAM_SPEED: parseInt($('devBeamSpeed').value, 10),
     SNIFF_RADIUS: parseInt($('devSniffRadius').value, 10),
     TOOL_CD: readToolCdFromDom(),
+    MARK_COOLDOWN: readMarkCooldownFromDom(),
     DEBUG_NO_CD: $('devNoCdCheck').checked,
   };
   localStorage.setItem(DEV_STORAGE_KEY, JSON.stringify(cfg));
@@ -110,14 +136,18 @@ function applyToolCdToWorld(toolCd) {
 
 /** 服务器全局调参推送：同步 3000 联机端的工具展示与光束参数 */
 function applyDevToolsFromServer(m) {
-  if (!world?.tools || !m.tools) return;
-  for (const [key, def] of Object.entries(m.tools)) {
-    world.tools[key] = { ...world.tools[key], ...def };
+  if (!world) return;
+  if (m.tools) {
+    world.tools = world.tools || {};
+    for (const [key, def] of Object.entries(m.tools)) {
+      world.tools[key] = { ...world.tools[key], ...def };
+    }
   }
   if (m.noToolCd !== undefined) {
     world.noToolCd = !!m.noToolCd;
     if (controller?.noToolCd !== undefined) controller.noToolCd = !!m.noToolCd;
   }
+  if (m.markCooldown !== undefined) applyMarkCooldownToWorld(m.markCooldown);
 }
 
 function restoreDevConfig() {
@@ -129,6 +159,7 @@ function restoreDevConfig() {
     ...saved,
     AI_SPEED: { ...DEV_DEFAULTS.AI_SPEED, ...(saved.AI_SPEED || {}) },
     TOOL_CD: { ...DEV_DEFAULTS.TOOL_CD, ...(saved.TOOL_CD || {}) },
+    MARK_COOLDOWN: normalizeMarkCooldown(saved.MARK_COOLDOWN ?? DEV_DEFAULTS.MARK_COOLDOWN),
   };
   const antCount = Math.max(AI_ANT_COUNT_MIN, Math.min(AI_ANT_COUNT_MAX, c.AI_ANT_COUNT));
 
@@ -165,9 +196,14 @@ function restoreDevConfig() {
     valEl.textContent = cd;
   }
   $('devNoCdCheck').checked = !!c.DEBUG_NO_CD;
+  if ($('devMarkCd')) {
+    $('devMarkCd').value = c.MARK_COOLDOWN;
+    $('devMarkCdVal').textContent = c.MARK_COOLDOWN;
+  }
   applyBeamSpeedToWorld(c.BEAM_SPEED);
   applySniffRadiusToWorld(c.SNIFF_RADIUS);
   applyToolCdToWorld(c.TOOL_CD);
+  applyMarkCooldownToWorld(c.MARK_COOLDOWN);
 }
 
 function sendDevConfig() {
@@ -189,11 +225,13 @@ function sendDevConfig() {
     BEAM_SPEED: parseInt($('devBeamSpeed').value, 10),
     SNIFF_RADIUS: parseInt($('devSniffRadius').value, 10),
     TOOL_CD: readToolCdFromDom(),
+    MARK_COOLDOWN: readMarkCooldownFromDom(),
     DEBUG_NO_CD: $('devNoCdCheck').checked,
   });
   applyBeamSpeedToWorld(parseInt($('devBeamSpeed').value, 10));
   applySniffRadiusToWorld(parseInt($('devSniffRadius').value, 10));
   applyToolCdToWorld(readToolCdFromDom());
+  applyMarkCooldownToWorld(readMarkCooldownFromDom());
 }
 
 function bindSlider(id, valId, decimals) {
@@ -241,6 +279,7 @@ if (DEBUG_MODE) {
   bindSlider('devFoodCapacity', 'devFoodCapacityVal', 0);
   bindSlider('devBeamSpeed', 'devBeamSpeedVal', 0);
   bindSlider('devSniffRadius', 'devSniffRadiusVal', 0);
+  bindSlider('devMarkCd', 'devMarkCdVal', 0);
 
   $('devReset').addEventListener('click', () => {
     localStorage.removeItem(DEV_STORAGE_KEY);
@@ -271,6 +310,8 @@ if (DEBUG_MODE) {
       $(`devToolCd_${key}`).value = cd;
       $(`devToolCd_${key}Val`).textContent = cd;
     }
+    $('devMarkCd').value = DEV_DEFAULTS.MARK_COOLDOWN;
+    $('devMarkCdVal').textContent = DEV_DEFAULTS.MARK_COOLDOWN;
     $('devNoCdCheck').checked = DEV_DEFAULTS.DEBUG_NO_CD;
     sendDevConfig();
   });

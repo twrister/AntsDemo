@@ -7,7 +7,7 @@ export const CONFIG = {
   WORLD_H: 1200,            // 世界高 (像素)
 
   // 对局
-  MATCH_DURATION: 600,              // 单局默认时长 (秒)
+  MATCH_DURATION: 300,              // 单局默认时长 (秒)，默认 5 分钟
   MATCH_DURATION_MIN_MINUTES: 1,    // 可配置最短对局 (分钟)
   MATCH_DURATION_MAX_MINUTES: 10,   // 可配置最长对局 (分钟)
   /** 将分钟数限制在合法范围并转为秒 */

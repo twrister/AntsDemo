@@ -27,7 +27,7 @@ const DEBUG_MODE = document.body.dataset.debug === 'true';
 
 const MATCH_DURATION_MIN = 1;
 const MATCH_DURATION_MAX = 10;
-const MATCH_DURATION_DEFAULT = 10;
+const MATCH_DURATION_DEFAULT = 5;
 
 // ---- 开发者工具（仅调试端口） ----
 

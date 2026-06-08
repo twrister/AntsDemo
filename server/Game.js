@@ -27,6 +27,7 @@ export class Game {
   /** @param opts.debugMode 单机调试对局 */
   /** @param opts.noToolCd 搜寻者工具无 CD（标记冷却仍生效） */
   /** @param opts.matchDuration 本局时长 (秒) */
+  /** @param opts.hiderFoodQuota 每位隐藏者获胜所需食物数 */
   constructor(hiderPlayers, opts = {}) {
     this.now = 0;
     this.matchDuration = opts.matchDuration ?? CONFIG.MATCH_DURATION;
@@ -61,7 +62,7 @@ export class Game {
     this.seekerCursor = null; // 搜寻者鼠标世界坐标，仅下发给隐藏者
 
     this.hiderCount = hiderPlayers.length;
-    this.hiderQuota = CONFIG.hiderFoodQuota(this.hiderCount);
+    this.hiderQuota = opts.hiderFoodQuota ?? CONFIG.HIDER_FOOD_QUOTA;
     this._botLabelSeq = 0;
     this.over = false;
     this.winner = null;

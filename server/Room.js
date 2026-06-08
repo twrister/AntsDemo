@@ -24,6 +24,7 @@ export class Room {
     this.game = null;
     this.loop = null;
     this.matchDurationMin = CONFIG.MATCH_DURATION / 60; // 对局时长 (分钟)，房主可改
+    this.hiderFoodQuota = CONFIG.HIDER_FOOD_QUOTA;     // 获胜所需食物数，房主可改
   }
 
   get seeker() { return [...this.players.values()].find(p => p.role === ROLE.SEEKER); }
@@ -42,6 +43,7 @@ export class Room {
       state: this.state,
       hostName: host ? host.name : '',
       matchMinutes: this.matchDurationMin,
+      hiderFoodQuota: this.hiderFoodQuota,
     };
   }
 
@@ -119,6 +121,14 @@ export class Room {
   setMatchDuration(id, minutes) {
     if (this.state !== 'lobby' || id !== this.hostId) return;
     this.matchDurationMin = CONFIG.matchDurationSeconds(minutes) / 60;
+    for (const p of this.players.values()) p.ready = false;
+    this.broadcastLobby();
+  }
+
+  /** 房主设置获胜所需食物数；变更后所有人需重新准备 */
+  setHiderFoodQuota(id, quota) {
+    if (this.state !== 'lobby' || id !== this.hostId) return;
+    this.hiderFoodQuota = CONFIG.hiderFoodQuota(quota);
     for (const p of this.players.values()) p.ready = false;
     this.broadcastLobby();
   }
@@ -239,11 +249,12 @@ export class Room {
   _beginPlaying(hiders, opts = {}) {
     this.state = 'playing';
     const matchDuration = CONFIG.matchDurationSeconds(this.matchDurationMin);
+    const hiderFoodQuota = this.hiderFoodQuota;
     const globalCfg = getGlobalDevConfig();
     const noToolCd = globalCfg?.DEBUG_NO_CD !== undefined
       ? !!globalCfg.DEBUG_NO_CD
       : !!opts.noToolCd;
-    this.game = new Game(hiders, { ...opts, matchDuration, noToolCd });
+    this.game = new Game(hiders, { ...opts, matchDuration, hiderFoodQuota, noToolCd });
     if (globalCfg) this.game.setDevConfig(globalCfg);
 
     for (const p of this.players.values()) {
@@ -337,6 +348,7 @@ export class Room {
       canStart: cs.ok,
       canStartReason: cs.reason,
       matchDurationMin: this.matchDurationMin,
+      hiderFoodQuota: this.hiderFoodQuota,
     });
   }
 
@@ -350,6 +362,7 @@ export class Room {
       case 'switch_role': if (this.state === 'lobby') this.switchRole(id, msg.role); break;
       case 'start_game': this.startGame(id); break;
       case 'set_match_duration': this.setMatchDuration(id, msg.minutes); break;
+      case 'set_hider_food_quota': this.setHiderFoodQuota(id, msg.quota); break;
       case 'solo_start':
         if (this.state === 'lobby' || this.state === 'ended') this.startSolo(id, msg.role);
         break;

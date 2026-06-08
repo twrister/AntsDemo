@@ -10,6 +10,7 @@ export const C2S = {
   SWITCH_ROLE:  'switch_role',  // { role: 'seeker'|'hider' }
   START_GAME:   'start_game',   // {} 房主开局
   SET_MATCH_DURATION: 'set_match_duration', // { minutes: 1~10 } 房主设置对局时长
+  SET_HIDER_FOOD_QUOTA: 'set_hider_food_quota', // { quota: 1~30 } 房主设置获胜所需食物数
 
   // 旧接口保留
   JOIN:         'join',         // 旧版兼容，已替换为 CREATE_ROOM/JOIN_ROOM

@@ -21,9 +21,15 @@ export const CONFIG = {
   MAX_HIDERS: 4,            // 单局最多隐藏者人数
   /** 隐藏者阵营标识色（按加入顺序分配，仅隐藏者方可见） */
   HIDER_COLORS: ['#6fc36f', '#5eb8e8', '#e8a05e', '#c36fd4'],
-  /** 每位隐藏者获证所需食物份数（固定值，与人数无关） */
+  /** 每位隐藏者获证所需食物份数（固定值，与人数无关；房主可在房间中配置） */
   HIDER_FOOD_QUOTA: 10,
-  hiderFoodQuota: () => 10,
+  HIDER_FOOD_QUOTA_MIN: 1,
+  HIDER_FOOD_QUOTA_MAX: 30,
+  /** 将食物目标限制在合法范围 */
+  hiderFoodQuota(quota) {
+    const n = Math.round(Number(quota) || 0);
+    return Math.max(this.HIDER_FOOD_QUOTA_MIN, Math.min(this.HIDER_FOOD_QUOTA_MAX, n));
+  },
 
   FOOD_ACTION_TIME: 1,          // 取食物 / 放食物等待时间 (秒)
 

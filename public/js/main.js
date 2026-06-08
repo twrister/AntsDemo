@@ -29,6 +29,10 @@ const MATCH_DURATION_MIN = 1;
 const MATCH_DURATION_MAX = 10;
 const MATCH_DURATION_DEFAULT = 5;
 
+const HIDER_FOOD_QUOTA_MIN = 1;
+const HIDER_FOOD_QUOTA_MAX = 30;
+const HIDER_FOOD_QUOTA_DEFAULT = 10;
+
 // ---- 开发者工具（仅调试端口） ----
 
 const AI_ANT_COUNT_MIN = 10;
@@ -389,6 +393,41 @@ $('matchDurationSelect')?.addEventListener('change', () => {
   net.send({ type: 'set_match_duration', minutes });
 });
 
+// ---- 获胜食物数（房主可配置 1~30，默认 10） ----
+
+let syncingHiderFoodQuota = false;
+
+/** 初始化获胜食物数下拉选项 */
+function initHiderFoodQuotaSelect() {
+  const sel = $('hiderFoodQuotaSelect');
+  if (!sel || sel.options.length > 0) return;
+  for (let q = HIDER_FOOD_QUOTA_MIN; q <= HIDER_FOOD_QUOTA_MAX; q++) {
+    const opt = document.createElement('option');
+    opt.value = String(q);
+    opt.textContent = `${q} 份`;
+    sel.appendChild(opt);
+  }
+  sel.value = String(HIDER_FOOD_QUOTA_DEFAULT);
+}
+
+/** 根据大厅状态更新获胜食物数控件 */
+function updateHiderFoodQuotaUi(quota, isHost) {
+  const sel = $('hiderFoodQuotaSelect');
+  if (!sel) return;
+  const q = Math.max(HIDER_FOOD_QUOTA_MIN, Math.min(HIDER_FOOD_QUOTA_MAX, quota || HIDER_FOOD_QUOTA_DEFAULT));
+  syncingHiderFoodQuota = true;
+  sel.value = String(q);
+  syncingHiderFoodQuota = false;
+  sel.disabled = !isHost;
+}
+
+initHiderFoodQuotaSelect();
+$('hiderFoodQuotaSelect')?.addEventListener('change', () => {
+  if (syncingHiderFoodQuota) return;
+  const quota = parseInt($('hiderFoodQuotaSelect').value, 10);
+  net.send({ type: 'set_hider_food_quota', quota });
+});
+
 // ---- 连接 ----
 
 async function ensureConnected() {
@@ -428,8 +467,9 @@ function renderRoomList(rooms) {
     const stateText = r.state === 'playing' ? '对局中' : r.state === 'ended' ? '已结束' : '等待中';
     const stateClass = r.state === 'playing' ? 'playing' : '';
     const durTag = r.matchMinutes ? ` · ${r.matchMinutes}分` : '';
+    const quotaTag = r.hiderFoodQuota ? ` · ${r.hiderFoodQuota}食` : '';
     item.innerHTML = `
-      <span class="room-item-name col-name">${escapeHtml(r.name)}${durTag}</span>
+      <span class="room-item-name col-name">${escapeHtml(r.name)}${durTag}${quotaTag}</span>
       <span class="col-host">${escapeHtml(r.hostName)}</span>
       <span class="col-count">${r.count}</span>
       <span class="room-item-state col-state ${stateClass}">${stateText}</span>
@@ -558,6 +598,7 @@ net.on('lobby', (m) => {
   $('startGameBtn').disabled = !m.canStart;
   $('canStartHint').textContent = isHost && !m.canStart ? m.canStartReason : '';
   updateMatchDurationUi(m.matchDurationMin, isHost);
+  updateHiderFoodQuotaUi(m.hiderFoodQuota, isHost);
 });
 
 net.on('dev_tools', applyDevToolsFromServer);

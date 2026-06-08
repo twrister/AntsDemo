@@ -96,6 +96,7 @@ export const CONFIG = {
   NEST: {
     xRatio: 0.5,            // 巢心 X = WORLD_W * xRatio（地图水平居中）
     yRatio: 0.12,           // 巢心 Y = WORLD_H * yRatio（地图中上方）
+    offsetY: 50,            // 巢心额外 Y 偏移（像素，正值向下）
     radius: 80,             // 巢穴区域半径：遮蔽搜寻者视野
     depositRadius: 30,      // 巢内食物堆放点交互半径
     depositOffsetX: 0,      // 堆放点相对巢心的偏移

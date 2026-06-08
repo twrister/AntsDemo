@@ -38,7 +38,7 @@ export class Game {
     this._nextFakeFoodId = 0;
     this.nest = {
       x: CONFIG.WORLD_W * CONFIG.NEST.xRatio,
-      y: CONFIG.WORLD_H * CONFIG.NEST.yRatio,
+      y: CONFIG.WORLD_H * CONFIG.NEST.yRatio + (CONFIG.NEST.offsetY ?? 0),
     };
     this.hidingSpots = this._buildHidingSpots();
     this.events = [];

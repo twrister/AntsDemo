@@ -9,13 +9,15 @@ export class Room {
    * @param {object} opts
    * @param {string} opts.id       - 房间唯一 ID
    * @param {string} opts.name     - 房间显示名称
-   * @param {boolean} [opts.isPrivate] - 是否私有（单机调试）
+   * @param {boolean} [opts.isPrivate] - 是否私有（单机房间，不展示在列表）
+   * @param {boolean} [opts.soloDebugMode] - 单机开局是否标记为调试对局（仅调试端口）
    * @param {Function} [opts.onChange] - 状态变化回调，通知 manager 刷新列表
    */
-  constructor({ id, name, isPrivate = false, onChange = null }) {
+  constructor({ id, name, isPrivate = false, soloDebugMode = false, onChange = null }) {
     this.id = id;
     this.name = name;
     this.isPrivate = isPrivate;
+    this.soloDebugMode = soloDebugMode;
     this.onChange = onChange;
 
     this.players = new Map();   // playerId -> { id, name, ws, role, ready }
@@ -191,7 +193,7 @@ export class Room {
       hiders = [{ id: p.id, bot: false, name: p.name }];
       while (hiders.length < CONFIG.MIN_HIDERS) hiders.push({ id: `bot_${botIdx++}`, bot: true });
     }
-    this._beginPlaying(hiders, { debugMode: true });
+    this._beginPlaying(hiders, { debugMode: this.soloDebugMode });
   }
 
   _resetToLobby() {

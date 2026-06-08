@@ -21,6 +21,7 @@ const MIME = {
  * @param {{
  *   port: number,
  *   allowDebug?: boolean,
+ *   allowSolo?: boolean,
  *   defaultPage?: string,
  *   label?: string,
  *   registerRooms?: (rooms: Map<string, import('./Room.js').Room>) => void,
@@ -32,6 +33,7 @@ export function createServer(opts) {
   const {
     port,
     allowDebug = false,
+    allowSolo = false,
     defaultPage = 'index.html',
     label = '',
     registerRooms = null,
@@ -72,12 +74,13 @@ export function createServer(opts) {
     }
   }
 
-  function createAndJoinRoom(playerId, ws, playerName, roomName, isPrivate = false) {
+  function createAndJoinRoom(playerId, ws, playerName, roomName, isPrivate = false, soloDebugMode = false) {
     const id = genRoomId();
     const room = new Room({
       id,
       name: roomName,
       isPrivate,
+      soloDebugMode,
       onChange: () => {
         cleanupRoom(id);
         broadcastRoomList();
@@ -162,10 +165,12 @@ export function createServer(opts) {
       }
 
       if (msg.type === 'solo_start') {
-        if (!allowDebug) return;
+        if (!allowSolo) return;
         if (conn.roomId === null) {
-          const playerName = (msg.name || '调试').slice(0, 16);
-          const room = createAndJoinRoom(playerId, ws, playerName, `${playerName}的房间`, true);
+          const playerName = (msg.name || (allowDebug ? '调试' : '玩家')).slice(0, 16);
+          const room = createAndJoinRoom(
+            playerId, ws, playerName, `${playerName}的房间`, true, allowDebug,
+          );
           room.handle(playerId, msg);
         } else {
           const room = rooms.get(conn.roomId);

@@ -510,16 +510,16 @@ async function joinRoom(roomId) {
   net.send({ type: 'join_room', name, roomId });
 }
 
-// ---- 单机调试（仅调试端口） ----
+// ---- 单机模式（正式服与调试服均可；DEV 面板仅调试服） ----
 
-if (DEBUG_MODE) {
-  $('soloSeekerBtn').addEventListener('click', () => startSolo(ROLE.SEEKER));
-  $('soloHiderBtn').addEventListener('click', () => startSolo(ROLE.HIDER));
-}
+const soloSeekerBtn = $('soloSeekerBtn');
+const soloHiderBtn = $('soloHiderBtn');
+if (soloSeekerBtn) soloSeekerBtn.addEventListener('click', () => startSolo(ROLE.SEEKER));
+if (soloHiderBtn) soloHiderBtn.addEventListener('click', () => startSolo(ROLE.HIDER));
 
 async function startSolo(soloRole) {
   await ensureConnected();
-  const name = $('nameInput').value.trim() || '调试';
+  const name = $('nameInput').value.trim() || (DEBUG_MODE ? '调试' : '玩家');
   net.send({ type: 'solo_start', name, role: soloRole });
 }
 

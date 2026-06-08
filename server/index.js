@@ -21,6 +21,7 @@ function onGlobalDevConfig(msg) {
 createServer({
   port: MAIN_PORT,
   allowDebug: false,
+  allowSolo: true,
   defaultPage: 'index.html',
   label: '正式',
   registerRooms: (rooms) => allRoomMaps.push(rooms),
@@ -29,6 +30,7 @@ createServer({
 createServer({
   port: DEBUG_PORT,
   allowDebug: true,
+  allowSolo: true,
   defaultPage: 'debug.html',
   label: '调试',
   registerRooms: (rooms) => allRoomMaps.push(rooms),

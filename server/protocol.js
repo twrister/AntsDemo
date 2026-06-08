@@ -17,10 +17,10 @@ export const C2S = {
   READY:        'ready',        // 切换准备状态
   MOVE:         'move',         // 隐藏者移动 { dx, dy }
   PICKUP:       'pickup',
-  MARK:         'mark',         // 搜寻者标记蚂蚁 { antId }
-  TOOL_BEAM:    'tool_beam',    // 搜寻者持续照射 { tool, x, y, active }
+  MARK:         'mark',         // 搜寻者标记蚂蚁 { antId }（多名搜寻者各自独立冷却）
+  TOOL_BEAM:    'tool_beam',    // 搜寻者持续照射 { tool, x, y, active }（按连接玩家路由）
   PLACE_FAKE_FOOD: 'place_fake_food', // 搜寻者放置假食物 { x, y }
-  CURSOR:       'cursor',       // 搜寻者鼠标世界坐标 { x, y }
+  CURSOR:       'cursor',       // 搜寻者鼠标世界坐标 { x, y }（隐藏者见多只大手）
   RESTART:      'restart',      // 结算后重开（返回大厅）
   SOLO_START:   'solo_start',   // 单机调试 { role }
 };
@@ -33,7 +33,7 @@ export const S2C = {
   START:      'start',      // { role, world, antId? }
   SNAPSHOT:   'snapshot',   // 10Hz 世界快照
   EVENT:      'event',
-  END:        'end',        // { winner, reason }
+  END:        'end',        // { winner, reason, seekers[] }
   DEV_TOOLS:  'dev_tools',  // 全局调参变更时同步客户端工具展示 { tools, noToolCd }
 };
 

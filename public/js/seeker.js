@@ -168,9 +168,20 @@ export class SeekerController {
     this._refreshArmed();
   }
 
-  /** 光束工具在快照中对应的字段名 */
+  /** 光束工具在快照中对应的数组字段名 */
   _beamSnapKey(tool) {
-    return tool === 'sniff' ? 'sniffBeam' : 'lightBeam';
+    return tool === 'sniff' ? 'sniffBeams' : 'lightBeams';
+  }
+
+  /** 合并本地光束与快照中其他搜寻者的光束 */
+  _mergeBeams(snapKey, localBeam, snap, extra = {}) {
+    const beams = [...(snap[snapKey] ?? [])];
+    if (!localBeam) return beams;
+    const idx = beams.findIndex((b) => b.self);
+    const entry = { ...localBeam, self: true, ...extra };
+    if (idx >= 0) beams[idx] = entry;
+    else beams.push(entry);
+    return beams;
   }
 
   _setupHotkeys() {
@@ -251,11 +262,12 @@ export class SeekerController {
     if (this.beamActive) {
       const tool = this.beamTool;
       const snapKey = this._beamSnapKey(tool);
+      const beams = snap[snapKey] ?? [];
       const target = this.screenToWorld(this.input.mouse.x, this.input.mouse.y);
       this._moveBeamToward(target, dt);
-      if (snap[snapKey]) this._beamConfirmed = true;
+      if (beams.some((b) => b.self)) this._beamConfirmed = true;
       // 先检测结束再同步，避免到期帧仍发送 active:true 导致服务器误重启
-      if (this._beamConfirmed && !snap[snapKey]) {
+      if (this._beamConfirmed && !beams.some((b) => b.self)) {
         this.net.send({ type: 'tool_beam', tool, x: target.x, y: target.y, active: false });
         this.beamActive = false;
         this.beamTool = null;
@@ -294,12 +306,13 @@ export class SeekerController {
       ? { x: this._localBeam.x, y: this._localBeam.y, radius: toolDef.radius }
       : null;
 
-    const lightBeam = this.beamActive && this.beamTool === 'panic'
-      ? localBeam
-      : snap.lightBeam;
-    const sniffBeam = this.beamActive && this.beamTool === 'sniff'
-      ? { ...localBeam, hiderDetected: !!snap.sniffBeam?.hiderDetected }
-      : snap.sniffBeam;
+    const selfSniff = (snap.sniffBeams ?? []).find((b) => b.self);
+    const lightBeams = this.beamActive && this.beamTool === 'panic'
+      ? this._mergeBeams('lightBeams', localBeam, snap)
+      : (snap.lightBeams ?? []);
+    const sniffBeams = this.beamActive && this.beamTool === 'sniff'
+      ? this._mergeBeams('sniffBeams', localBeam, snap, { hiderDetected: !!selfSniff?.hiderDetected })
+      : (snap.sniffBeams ?? []);
 
     // 限频同步鼠标世界坐标，供隐藏者方显示大手
     this._cursorSendTimer -= dt;
@@ -327,8 +340,8 @@ export class SeekerController {
     return {
       cam: this.cam,
       viewRadius,
-      lightBeam,
-      sniffBeam,
+      lightBeams,
+      sniffBeams,
       toolPreview,
     };
   }

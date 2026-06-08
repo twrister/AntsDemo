@@ -17,10 +17,15 @@ export const CONFIG = {
     return clamped * 60;
   },
   AI_ANT_COUNT: 30,         // 地图 AI 蚂蚁数量
+  MAX_PLAYERS: 10,          // 单房间最多联机人数
   MIN_HIDERS: 1,            // 最少隐藏者(不足用 AI 占位)
-  MAX_HIDERS: 4,            // 单局最多隐藏者人数
+  MAX_HIDERS: 9,            // 单局最多隐藏者人数
+  MAX_SEEKERS: 9,           // 单局最多搜寻者人数（受总人数约束）
   /** 隐藏者阵营标识色（按加入顺序分配，仅隐藏者方可见） */
-  HIDER_COLORS: ['#6fc36f', '#5eb8e8', '#e8a05e', '#c36fd4'],
+  HIDER_COLORS: [
+    '#6fc36f', '#5eb8e8', '#e8a05e', '#c36fd4',
+    '#e85e7a', '#5ee8c8', '#b8e85e', '#8e5ee8', '#e8d45e',
+  ],
   /** 每位隐藏者获证所需食物份数（固定值，与人数无关；房主可在房间中配置） */
   HIDER_FOOD_QUOTA: 10,
   HIDER_FOOD_QUOTA_MIN: 1,

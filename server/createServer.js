@@ -154,7 +154,7 @@ export function createServer(opts) {
         if (!room || room.state === 'playing') return;
         const playerName = (msg.name || '玩家').slice(0, 16);
         conn.roomId = room.id;
-        room.addPlayer({ id: playerId, name: playerName, ws });
+        if (!room.addPlayer({ id: playerId, name: playerName, ws })) return;
         broadcastRoomList();
         return;
       }

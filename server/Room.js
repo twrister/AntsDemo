@@ -30,6 +30,7 @@ export class Room {
   }
 
   get seeker() { return [...this.players.values()].find(p => p.role === ROLE.SEEKER); }
+  get seekers() { return [...this.players.values()].filter(p => p.role === ROLE.SEEKER); }
   get hiders() { return [...this.players.values()].filter(p => p.role === ROLE.HIDER); }
 
   /** 进入房间人数 */
@@ -50,6 +51,7 @@ export class Room {
   }
 
   addPlayer(player) {
+    if (this.count >= CONFIG.MAX_PLAYERS) return false;
     if (this.state === 'ended') this._resetToLobby();
 
     // 默认角色：无搜寻者则为搜寻者，否则为隐藏者
@@ -71,14 +73,16 @@ export class Room {
     });
     this.broadcastLobby();
     this.onChange?.();
+    return true;
   }
 
   removePlayer(id) {
     const p = this.players.get(id);
     if (!p) return;
+    const wasSeeker = p.role === ROLE.SEEKER;
     this.players.delete(id);
 
-    if (this.state === 'playing' && p.role === ROLE.SEEKER) {
+    if (this.state === 'playing' && wasSeeker && this.seekers.length === 0) {
       this.endGame(ROLE.HIDER, '搜寻者离开了');
     } else if (this.state === 'playing' && p.role === ROLE.HIDER && this.game) {
       const ant = this.game.ants.find(a => a.playerId === id);
@@ -148,10 +152,12 @@ export class Room {
    * @returns {{ ok: boolean, reason: string }}
    */
   canStart() {
-    const seekers = [...this.players.values()].filter(p => p.role === ROLE.SEEKER);
+    const seekers = this.seekers;
     const hiders = this.hiders;
-    if (seekers.length !== 1) return { ok: false, reason: '需要恰好 1 名搜寻者' };
+    const total = this.count;
+    if (seekers.length < 1) return { ok: false, reason: '至少需要 1 名搜寻者' };
     if (hiders.length < 1) return { ok: false, reason: '至少需要 1 名隐藏者' };
+    if (total > CONFIG.MAX_PLAYERS) return { ok: false, reason: `房间最多 ${CONFIG.MAX_PLAYERS} 人` };
     if (hiders.length > CONFIG.MAX_HIDERS) return { ok: false, reason: `隐藏者最多 ${CONFIG.MAX_HIDERS} 人` };
     const notReady = [...this.players.values()].filter(p => !p.ready);
     if (notReady.length > 0) return { ok: false, reason: '还有玩家未准备' };
@@ -256,7 +262,8 @@ export class Room {
     const noToolCd = globalCfg?.DEBUG_NO_CD !== undefined
       ? !!globalCfg.DEBUG_NO_CD
       : (opts.debugMode ? true : !!opts.noToolCd);
-    this.game = new Game(hiders, { ...opts, matchDuration, hiderFoodQuota, noToolCd });
+    const seekerIds = this.seekers.map(p => p.id);
+    this.game = new Game(hiders, { ...opts, matchDuration, hiderFoodQuota, noToolCd, seekerIds });
     if (globalCfg) this.game.setDevConfig(globalCfg);
 
     for (const p of this.players.values()) {
@@ -309,18 +316,21 @@ export class Room {
   endGame(winner, reason) {
     if (this.loop) { clearInterval(this.loop); this.loop = null; }
     this.state = 'ended';
-    const seeker = this.seeker;
+    const seekers = this.seekers.map((s) => {
+      const state = this.game?.seekerStates?.get(s.id);
+      return {
+        name: s.name,
+        markHits: state?.markHits ?? 0,
+        markMisses: state?.markMisses ?? 0,
+      };
+    });
     this.broadcast({
       type: S2C.END,
       winner,
       reason,
       hiderScores: this.game ? this.game._hiderScoreList() : [],
       hiderQuota: this.game ? this.game.hiderQuota : 0,
-      seeker: seeker && this.game ? {
-        name: seeker.name,
-        markHits: this.game.markHits,
-        markMisses: this.game.markMisses,
-      } : null,
+      seekers,
     });
     this.onChange?.();
   }
@@ -371,10 +381,10 @@ export class Room {
       case 'restart': if (this.state === 'ended') this.restart(); break;
       case 'move': if (g && p.role === ROLE.HIDER) g.setHiderMove(id, msg.dx || 0, msg.dy || 0); break;
       case 'sprint': if (g && p.role === ROLE.HIDER) g.setHiderSprint(id, !!msg.active); break;
-      case 'mark': if (g && p.role === ROLE.SEEKER) g.markAnt(msg.antId); break;
-      case 'tool_beam': if (g && p.role === ROLE.SEEKER) g.setToolBeam(msg.tool, msg.x, msg.y, !!msg.active); break;
-      case 'place_fake_food': if (g && p.role === ROLE.SEEKER) g.placeFakeFood(msg.x, msg.y); break;
-      case 'cursor': if (g && p.role === ROLE.SEEKER) g.setSeekerCursor(msg.x, msg.y); break;
+      case 'mark': if (g && p.role === ROLE.SEEKER) g.markAnt(id, msg.antId); break;
+      case 'tool_beam': if (g && p.role === ROLE.SEEKER) g.setToolBeam(id, msg.tool, msg.x, msg.y, !!msg.active); break;
+      case 'place_fake_food': if (g && p.role === ROLE.SEEKER) g.placeFakeFood(id, msg.x, msg.y); break;
+      case 'cursor': if (g && p.role === ROLE.SEEKER) g.setSeekerCursor(id, msg.x, msg.y); break;
     }
   }
 

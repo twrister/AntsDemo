@@ -60,10 +60,55 @@ export class Net {
         angle: a0.angle + angleDiff(a0.angle, a1.angle) * f,
       };
     });
-    const lightBeam = this._lerpBeam(s0.lightBeam, s1.lightBeam, f);
-    const sniffBeam = this._lerpSniffBeam(s0.sniffBeam, s1.sniffBeam, f);
-    const seekerCursor = this._lerpPoint(s0.seekerCursor, s1.seekerCursor, f);
-    return { ...s1, ants, lightBeam, sniffBeam, seekerCursor };
+    const lightBeams = this._lerpBeamArray(s0.lightBeams, s1.lightBeams, f);
+    const sniffBeams = this._lerpSniffBeamArray(s0.sniffBeams, s1.sniffBeams, f);
+    const seekerCursors = this._lerpCursorArray(s0.seekerCursors, s1.seekerCursors, f);
+    return { ...s1, ants, lightBeams, sniffBeams, seekerCursors };
+  }
+
+  /** 按 seekerId 插值光束数组 */
+  _lerpBeamArray(a0, a1, f) {
+    const list0 = a0 ?? [];
+    const list1 = a1 ?? [];
+    const map1 = new Map(list1.map((b) => [b.seekerId ?? 'default', b]));
+    const ids = new Set([...list0.map((b) => b.seekerId ?? 'default'), ...map1.keys()]);
+    const result = [];
+    for (const id of ids) {
+      const b0 = list0.find((b) => (b.seekerId ?? 'default') === id);
+      const b1 = map1.get(id);
+      const beam = this._lerpBeam(b0, b1, f);
+      if (beam) result.push({ ...beam, seekerId: id, self: !!(b1?.self ?? b0?.self) });
+    }
+    return result;
+  }
+
+  /** 按 seekerId 插值嗅探圈数组 */
+  _lerpSniffBeamArray(a0, a1, f) {
+    const beams = this._lerpBeamArray(a0, a1, f);
+    const list0 = a0 ?? [];
+    const list1 = a1 ?? [];
+    return beams.map((beam) => {
+      const id = beam.seekerId ?? 'default';
+      const b0 = list0.find((b) => (b.seekerId ?? 'default') === id);
+      const b1 = list1.find((b) => (b.seekerId ?? 'default') === id);
+      return { ...beam, hiderDetected: !!(b0?.hiderDetected || b1?.hiderDetected) };
+    });
+  }
+
+  /** 按 seekerId 插值搜寻者光标数组 */
+  _lerpCursorArray(a0, a1, f) {
+    const list0 = a0 ?? [];
+    const list1 = a1 ?? [];
+    const map1 = new Map(list1.map((c) => [c.seekerId ?? 'default', c]));
+    const ids = new Set([...list0.map((c) => c.seekerId ?? 'default'), ...map1.keys()]);
+    const result = [];
+    for (const id of ids) {
+      const c0 = list0.find((c) => (c.seekerId ?? 'default') === id);
+      const c1 = map1.get(id);
+      const point = this._lerpPoint(c0, c1, f);
+      if (point) result.push({ ...point, seekerId: id });
+    }
+    return result;
   }
 
   /** 插值二维坐标点 */

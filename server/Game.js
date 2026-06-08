@@ -24,6 +24,7 @@ function moveToward(pos, target, maxDist) {
 
 export class Game {
   /** @param hiderPlayers 隐藏者描述数组：{ id, bot } */
+  /** @param opts.seekerIds 真人搜寻者 playerId 列表，每名搜寻者独立工具/冷却/光束 */
   /** @param opts.debugMode 单机调试对局 */
   /** @param opts.noToolCd 搜寻者工具无 CD（标记冷却仍生效） */
   /** @param opts.matchDuration 本局时长 (秒) */
@@ -48,18 +49,9 @@ export class Game {
     this.phero = new PheromoneField();
     this._pheroTickCount = 0; // 每 2 tick 才生成一次信息素快照以节省带宽
 
-    // 工具状态（各工具独立 CD，开局统一进入 TOOL_STARTING_CD 冷却）
-    this.toolCooldownUntil = {};
-    this._toolsUsed = false;
-    this.markCooldownUntil = 0;
-    this.markHits = 0;   // 搜寻者成功标记隐藏者次数
-    this.markMisses = 0; // 搜寻者误标 AI 次数
+    // 每名搜寻者独立的状态（工具 CD、标记 CD、光束、光标、统计）
+    this.seekerStates = new Map();
     this.effects = {};
-    this.lightBeam = null; // 强光照射：{ x, y, until }
-    this._lastLightBeamUntil = 0; // 上次光束自然结束时刻，用于忽略过期后的残留 active:true
-    this.sniffBeam = null; // 气息嗅探：{ x, y, until, hiderDetected }
-    this._lastSniffBeamUntil = 0;
-    this.seekerCursor = null; // 搜寻者鼠标世界坐标，仅下发给隐藏者
 
     this.hiderCount = hiderPlayers.length;
     this.hiderQuota = opts.hiderFoodQuota ?? CONFIG.HIDER_FOOD_QUOTA;
@@ -74,7 +66,27 @@ export class Game {
     this.noToolCd = !!opts.noToolCd;
 
     this._buildWorld(hiderPlayers);
-    this._resetStartingToolCooldowns();
+    for (const seekerId of opts.seekerIds ?? []) {
+      const state = this._createSeekerState();
+      this.seekerStates.set(seekerId, state);
+      this._resetStartingToolCooldowns(state);
+    }
+  }
+
+  /** 初始化单个搜寻者的运行时状态 */
+  _createSeekerState() {
+    return {
+      toolCooldownUntil: {},
+      _toolsUsed: false,
+      markCooldownUntil: 0,
+      markHits: 0,
+      markMisses: 0,
+      lightBeam: null,
+      _lastLightBeamUntil: 0,
+      sniffBeam: null,
+      _lastSniffBeamUntil: 0,
+      cursor: null,
+    };
   }
 
   /** 读取某工具当前 CD 时长（秒），devCfg 可覆盖 config 默认值 */
@@ -84,11 +96,11 @@ export class Game {
     return CONFIG.TOOLS[tool]?.cd ?? 0;
   }
 
-  /** 开局或 dev 调参后、尚未使用任何工具时，将所有工具置为统一开局 CD */
-  _resetStartingToolCooldowns() {
+  /** 开局或 dev 调参后、尚未使用任何工具时，将指定搜寻者所有工具置为统一开局 CD */
+  _resetStartingToolCooldowns(state) {
     const startCd = CONFIG.TOOL_STARTING_CD ?? 5;
     for (const k of Object.keys(CONFIG.TOOLS)) {
-      this.toolCooldownUntil[k] = this.noToolCd ? 0 : this.now + startCd;
+      state.toolCooldownUntil[k] = this.noToolCd ? 0 : this.now + startCd;
     }
   }
 
@@ -175,8 +187,8 @@ export class Game {
   }
 
   /** 误标 AI 后进入标记功能冷却 */
-  _applyMarkCooldown() {
-    this.markCooldownUntil = this.now + this._markCooldownSec();
+  _applyMarkCooldown(state) {
+    state.markCooldownUntil = this.now + this._markCooldownSec();
   }
 
   /** 嗅探圈半径（像素，开发者工具可热改） */
@@ -345,15 +357,18 @@ export class Game {
   }
 
   /** 记录搜寻者鼠标世界坐标，供隐藏者方显示 */
-  setSeekerCursor(x, y) {
-    this.seekerCursor = {
+  setSeekerCursor(seekerId, x, y) {
+    const state = this.seekerStates.get(seekerId);
+    if (!state) return;
+    state.cursor = {
       x: Math.max(0, Math.min(CONFIG.WORLD_W, x)),
       y: Math.max(0, Math.min(CONFIG.WORLD_H, y)),
     };
   }
 
-  markAnt(antId) {
-    if (this.over || this.now < this.markCooldownUntil) return;
+  markAnt(seekerId, antId) {
+    const state = this.seekerStates.get(seekerId);
+    if (!state || this.over || this.now < state.markCooldownUntil) return;
     const ant = this.ants.find(a => a.id === antId);
     if (!ant || this._isMarked(ant)) return;
     // 躲藏点内免疫标记
@@ -371,7 +386,7 @@ export class Game {
         ant.pickupProgress = 0;
         ant.depositProgress = 0;
       }
-      this.markHits++;
+      state.markHits++;
       this.events.push({
         t: 'mark_hit', x: ant.x, y: ant.y, lives: ant.lives,
         antId: ant.id, playerId: ant.playerId, label: ant.hiderLabel,
@@ -384,27 +399,27 @@ export class Game {
     } else {
       // 误标 AI：触发逃窜态短暂打乱画面，并进入标记冷却
       triggerFlee(ant, CONFIG.MISMARK_FLEE_DURATION, { x: ant.x, y: ant.y });
-      this._applyMarkCooldown();
-      this.markMisses++;
+      this._applyMarkCooldown(state);
+      state.markMisses++;
       this.events.push({ t: 'mark_miss', x: ant.x, y: ant.y, antId });
     }
   }
 
   /** 标记功能剩余冷却 (秒) */
-  _markCdLeft() {
-    return Math.max(0, +(this.markCooldownUntil - this.now).toFixed(1));
+  _markCdLeft(state) {
+    return Math.max(0, +(state.markCooldownUntil - this.now).toFixed(1));
   }
 
   /** 某工具剩余冷却 (秒) */
-  _toolCdLeft(tool) {
+  _toolCdLeft(state, tool) {
     if (this.noToolCd) return 0;
-    return Math.max(0, +(this.toolCooldownUntil[tool] - this.now).toFixed(1));
+    return Math.max(0, +(state.toolCooldownUntil[tool] - this.now).toFixed(1));
   }
 
   /** 工具是否可用（未在独立 CD 中） */
-  _canUseTool(tool) {
+  _canUseTool(state, tool) {
     if (this.noToolCd) return true;
-    return this.now >= (this.toolCooldownUntil[tool] ?? 0);
+    return this.now >= (state.toolCooldownUntil[tool] ?? 0);
   }
 
   /** 持续照射类工具配置：强光照射 / 气息嗅探 */
@@ -419,10 +434,11 @@ export class Game {
   /**
    * 搜寻者放置假食物：不释放信息素，AI 不可见，真人尝试搬运时触发警告高亮。
    */
-  placeFakeFood(x, y) {
+  placeFakeFood(seekerId, x, y) {
+    const state = this.seekerStates.get(seekerId);
     const tool = 'fakeFood';
-    if (this.over || !Game.PLACE_TOOLS.has(tool)) return;
-    if (!this._canUseTool(tool)) return;
+    if (!state || this.over || !Game.PLACE_TOOLS.has(tool)) return;
+    if (!this._canUseTool(state, tool)) return;
 
     const def = CONFIG.TOOLS.fakeFood;
     const maxCount = def.maxCount ?? 8;
@@ -444,45 +460,46 @@ export class Game {
       expiresAt: this.now + lifetime,
     });
 
-    this._toolsUsed = true;
-    if (!this.noToolCd) this.toolCooldownUntil[tool] = this.now + this._toolCd(tool);
+    state._toolsUsed = true;
+    if (!this.noToolCd) state.toolCooldownUntil[tool] = this.now + this._toolCd(tool);
     this.events.push({ t: 'tool', tool, x: px, y: py });
   }
 
   /**
    * 持续照射类工具：点击开始后更新光束位置，自动持续至时长结束。
    */
-  setToolBeam(tool, x, y, active) {
+  setToolBeam(seekerId, tool, x, y, active) {
+    const state = this.seekerStates.get(seekerId);
     const cfg = Game.BEAM_TOOLS[tool];
-    if (this.over || !cfg) return;
+    if (!state || this.over || !cfg) return;
     const def = CONFIG.TOOLS[tool];
     const field = cfg.field;
 
     if (active) {
-      if (!this[field]) {
+      if (!state[field]) {
         // 光束刚结束后的残留 active:true 不应重启（无 CD 时尤甚）
-        const lastUntil = this[cfg.lastUntil];
+        const lastUntil = state[cfg.lastUntil];
         if (lastUntil > 0 && this.now < lastUntil + 0.3) return;
-        if (!this._canUseTool(tool)) return;
-        this._toolsUsed = true;
-        if (!this.noToolCd) this.toolCooldownUntil[tool] = this.now + this._toolCd(tool);
-        this[field] = { x, y, targetX: x, targetY: y, until: this.now + def.duration };
+        if (!this._canUseTool(state, tool)) return;
+        state._toolsUsed = true;
+        if (!this.noToolCd) state.toolCooldownUntil[tool] = this.now + this._toolCd(tool);
+        state[field] = { x, y, targetX: x, targetY: y, until: this.now + def.duration };
         this.events.push({ t: 'tool', tool, x, y });
       } else {
-        this[field].targetX = x;
-        this[field].targetY = y;
+        state[field].targetX = x;
+        state[field].targetY = y;
       }
     } else {
-      this[field] = null;
+      state[field] = null;
     }
   }
 
   /** 光束限速移向客户端上报的目标点 */
-  _updateBeam(beamKey, lastUntilKey, dt) {
-    const beam = this[beamKey];
+  _updateSeekerBeam(state, beamKey, lastUntilKey, dt) {
+    const beam = state[beamKey];
     if (!beam || this.now >= beam.until) {
-      if (beam) this[lastUntilKey] = beam.until;
-      this[beamKey] = null;
+      if (beam) state[lastUntilKey] = beam.until;
+      state[beamKey] = null;
       return;
     }
     moveToward(
@@ -493,8 +510,8 @@ export class Game {
   }
 
   /** 嗅探圈内检测未标记隐藏者；发现后持续警告 warnDuration 秒并结束嗅探 */
-  _applySniffDetect() {
-    const beam = this.sniffBeam;
+  _applySniffDetect(state) {
+    const beam = state.sniffBeam;
     if (!beam || beam.hiderDetected) return;
 
     const r2 = this._sniffRadius() ** 2;
@@ -510,15 +527,18 @@ export class Game {
     }
   }
 
-  /** 强光范围内触发 AI 蚂蚁逃离光源 */
+  /** 强光范围内触发 AI 蚂蚁逃离光源（聚合所有搜寻者光束） */
   _applyLightPanic() {
-    if (!this.lightBeam) return;
     const def = CONFIG.TOOLS.panic;
     const r2 = def.radius * def.radius;
-    const src = { x: this.lightBeam.x, y: this.lightBeam.y };
-    for (const a of this.ants) {
-      if (!a.isHider && !this._isInsideHidingSpot(a) && dist2(a, src) < r2) {
-        triggerFlee(a, 0.4, src);
+    for (const state of this.seekerStates.values()) {
+      const beam = state.lightBeam;
+      if (!beam) continue;
+      const src = { x: beam.x, y: beam.y };
+      for (const a of this.ants) {
+        if (!a.isHider && !this._isInsideHidingSpot(a) && dist2(a, src) < r2) {
+          triggerFlee(a, 0.4, src);
+        }
       }
     }
   }
@@ -651,10 +671,12 @@ export class Game {
 
     // 信息素蒸发（负反馈，每帧执行）
     this.phero.evaporate(dt);
-    this._updateBeam('lightBeam', '_lastLightBeamUntil', dt);
-    this._updateBeam('sniffBeam', '_lastSniffBeamUntil', dt);
+    for (const state of this.seekerStates.values()) {
+      this._updateSeekerBeam(state, 'lightBeam', '_lastLightBeamUntil', dt);
+      this._updateSeekerBeam(state, 'sniffBeam', '_lastSniffBeamUntil', dt);
+      this._applySniffDetect(state);
+    }
     this._applyLightPanic();
-    this._applySniffDetect();
 
     // 假食物到期移除
     this.fakeFoods = this.fakeFoods.filter(f => this.now < f.expiresAt);
@@ -898,38 +920,74 @@ export class Game {
         : this._hiderScoreList().map(({ color, ...rest }) => rest),
       hiderQuota: this.hiderQuota,
       phero: pheroSnap,  // null 时客户端复用上一帧缓存
-      toolCooldownLeft: Object.fromEntries(
-        Object.keys(CONFIG.TOOLS).map((k) => [k, this._toolCdLeft(k)]),
-      ),
-      markCdLeft: this._markCdLeft(),
+      ...(role === ROLE.SEEKER && (() => {
+        const myState = this.seekerStates.get(viewerPid);
+        return {
+          toolCooldownLeft: myState
+            ? Object.fromEntries(Object.keys(CONFIG.TOOLS).map((k) => [k, this._toolCdLeft(myState, k)]))
+            : {},
+          markCdLeft: myState ? this._markCdLeft(myState) : 0,
+        };
+      })()),
       debugMode: this.debugMode,
       noToolCd: this.noToolCd,
-      lightBeam: this.lightBeam && this.now < this.lightBeam.until
-        ? {
-            x: this.lightBeam.x,
-            y: this.lightBeam.y,
-            targetX: this.lightBeam.targetX,
-            targetY: this.lightBeam.targetY,
-            radius: CONFIG.TOOLS.panic.radius,
-          }
-        : null,
-      sniffBeam: this.sniffBeam && this.now < this.sniffBeam.until
-        ? {
-            x: this.sniffBeam.x,
-            y: this.sniffBeam.y,
-            targetX: this.sniffBeam.targetX,
-            targetY: this.sniffBeam.targetY,
-            radius: this._sniffRadius(),
-            hiderDetected: !!this.sniffBeam.hiderDetected,
-          }
-        : null,
-      seekerCursor: role === ROLE.HIDER && this.seekerCursor
-        ? {
-            x: Math.round(this.seekerCursor.x),
-            y: Math.round(this.seekerCursor.y),
-          }
-        : null,
+      lightBeams: this._serializeLightBeams(role, viewerPid),
+      sniffBeams: this._serializeSniffBeams(role, viewerPid),
+      seekerCursors: role === ROLE.HIDER ? this._serializeSeekerCursors() : [],
     };
+  }
+
+  /** 汇总所有搜寻者的强光束，搜寻者视角标记 self */
+  _serializeLightBeams(role, viewerPid) {
+    const beams = [];
+    for (const [seekerId, state] of this.seekerStates) {
+      const beam = state.lightBeam;
+      if (!beam || this.now >= beam.until) continue;
+      beams.push({
+        seekerId,
+        x: beam.x,
+        y: beam.y,
+        targetX: beam.targetX,
+        targetY: beam.targetY,
+        radius: CONFIG.TOOLS.panic.radius,
+        ...(role === ROLE.SEEKER && { self: seekerId === viewerPid }),
+      });
+    }
+    return beams;
+  }
+
+  /** 汇总所有搜寻者的嗅探圈，搜寻者视角标记 self */
+  _serializeSniffBeams(role, viewerPid) {
+    const beams = [];
+    for (const [seekerId, state] of this.seekerStates) {
+      const beam = state.sniffBeam;
+      if (!beam || this.now >= beam.until) continue;
+      beams.push({
+        seekerId,
+        x: beam.x,
+        y: beam.y,
+        targetX: beam.targetX,
+        targetY: beam.targetY,
+        radius: this._sniffRadius(),
+        hiderDetected: !!beam.hiderDetected,
+        ...(role === ROLE.SEEKER && { self: seekerId === viewerPid }),
+      });
+    }
+    return beams;
+  }
+
+  /** 隐藏者视角：所有搜寻者鼠标位置 */
+  _serializeSeekerCursors() {
+    const cursors = [];
+    for (const [seekerId, state] of this.seekerStates) {
+      if (!state.cursor) continue;
+      cursors.push({
+        seekerId,
+        x: Math.round(state.cursor.x),
+        y: Math.round(state.cursor.y),
+      });
+    }
+    return cursors;
   }
 
   drainEvents() { const e = this.events; this.events = []; return e; }
@@ -1010,8 +1068,10 @@ export class Game {
         : (params.MARK_COOLDOWN?.min ?? params.MARK_COOLDOWN?.max ?? this.devCfg.MARK_COOLDOWN ?? CONFIG.MARK_COOLDOWN);
       this.devCfg.MARK_COOLDOWN = Math.max(0, Math.min(5, +raw));
     }
-    if ((toolCdChanged || params.DEBUG_NO_CD !== undefined) && !this._toolsUsed) {
-      this._resetStartingToolCooldowns();
+    if (toolCdChanged || params.DEBUG_NO_CD !== undefined) {
+      for (const state of this.seekerStates.values()) {
+        if (!state._toolsUsed) this._resetStartingToolCooldowns(state);
+      }
     }
   }
 

@@ -20,7 +20,7 @@ export class Renderer {
    * 渲染一帧。
    * @param snap 插值后的世界快照
    * @param cam  镜头 { x, y, zoom } —— 世界坐标中心点
-   * @param opts { role, world, time, viewRadius, lightBeam, sniffBeam, toolPreview, viewport }
+   * @param opts { role, world, time, viewRadius, lightBeams, sniffBeams, toolPreview, viewport }
    */
   draw(snap, cam, opts) {
     const ctx = this.ctx;
@@ -59,8 +59,10 @@ export class Renderer {
     this._drawNormalFood(ctx, snap.normalFood);
     this._drawFakeFood(ctx, snap.fakeFood, opts);
     if (opts.toolPreview) this._drawToolRangePreview(ctx, opts.toolPreview, opts.time);
-    if (opts.lightBeam) this._drawLightBeam(ctx, opts.lightBeam, opts.time);
-    if (opts.sniffBeam) this._drawSniffBeam(ctx, opts.sniffBeam, opts.time);
+    const lightBeams = opts.lightBeams ?? [];
+    const sniffBeams = opts.sniffBeams ?? [];
+    for (const beam of lightBeams) this._drawLightBeam(ctx, beam, opts.time);
+    for (const beam of sniffBeams) this._drawSniffBeam(ctx, beam, opts.time);
 
     for (const ant of snap.ants) {
       if (this._shouldHideAntInNest(ant, snap.nest, opts)) continue;
@@ -70,9 +72,12 @@ export class Renderer {
         this._drawAnt(ctx, ant, opts);
       }
     }
-    // 隐藏者可见搜寻者鼠标位置（大手）
-    if (opts.role === ROLE.HIDER && snap.seekerCursor) {
-      this._drawSeekerHand(ctx, snap.seekerCursor, opts.time);
+    // 隐藏者可见所有搜寻者鼠标位置（大手）
+    if (opts.role === ROLE.HIDER) {
+      const cursors = snap.seekerCursors ?? [];
+      for (const cursor of cursors) {
+        this._drawSeekerHand(ctx, cursor, opts.time);
+      }
     }
 
     ctx.restore();
@@ -80,18 +85,23 @@ export class Renderer {
     // 屏幕空间叠层
     if (opts.role === ROLE.SEEKER && opts.viewRadius) {
       this._drawVignette(ctx, W, H, opts.viewRadius);
-      // 强光照射可穿透暗角，照亮四角阴暗处
-      if (opts.lightBeam) this._drawLightVignetteRelief(ctx, opts.lightBeam, cam, W, H, opts.time);
+      // 强光照射可穿透暗角，照亮四角阴暗处（支持多束光）
+      for (const beam of lightBeams) {
+        this._drawLightVignetteRelief(ctx, beam, cam, W, H, opts.time);
+      }
     }
     // 光束内蚂蚁二次绘制：叠在暗角之上，提升阴暗处辨识度
-    if (opts.lightBeam && opts.role === ROLE.SEEKER) {
+    if (lightBeams.length && opts.role === ROLE.SEEKER) {
       ctx.save();
       ctx.translate(W / 2, H / 2);
       ctx.scale(zoom, zoom);
       ctx.translate(-cam.x, -cam.y);
       for (const ant of snap.ants) {
         if (this._shouldHideAntInNest(ant, snap.nest, opts)) continue;
-        const illum = this._beamIllumination(ant, opts.lightBeam);
+        let illum = 0;
+        for (const beam of lightBeams) {
+          illum = Math.max(illum, this._beamIllumination(ant, beam));
+        }
         if (illum <= 0.06) continue;
         if (ant.hiding) this._drawAntShadow(ctx, ant, opts, illum);
         else this._drawAnt(ctx, ant, opts, illum);

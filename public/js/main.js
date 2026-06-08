@@ -748,14 +748,15 @@ function renderEndStats(m) {
   const quota = m.hiderQuota ?? 0;
   let html = '';
 
-  if (m.seeker) {
-    const miss = m.seeker.markMisses > 0
-      ? `<span class="end-meta">误标 ${m.seeker.markMisses} 次</span>`
+  const seekers = m.seekers ?? (m.seeker ? [m.seeker] : []);
+  for (const s of seekers) {
+    const miss = s.markMisses > 0
+      ? `<span class="end-meta">误标 ${s.markMisses} 次</span>`
       : '';
     html += `<div class="end-section">
-      <div class="end-section-title"><span class="role-seeker">搜寻者</span> ${escapeHtml(m.seeker.name)}</div>
+      <div class="end-section-title"><span class="role-seeker">搜寻者</span> ${escapeHtml(s.name)}</div>
       <div class="end-seeker-stats">
-        <span class="end-stat">成功标记 <strong>${m.seeker.markHits}</strong> 次</span>${miss}
+        <span class="end-stat">成功标记 <strong>${s.markHits}</strong> 次</span>${miss}
       </div>
     </div>`;
   }
@@ -781,7 +782,7 @@ function renderEndStats(m) {
       </div>`;
     }
     html += '</div></div>';
-  } else if (!m.seeker) {
+  } else if (!seekers.length) {
     html = '<p class="end-empty">无对局数据</p>';
   }
 

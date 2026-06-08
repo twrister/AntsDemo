@@ -46,29 +46,41 @@ export class HiderController {
     this.net.send({ type: 'sprint', active: false });
   }
 
-  /** 与服务器同速追向目标点，每帧平滑渲染强光 */
-  _smoothLightBeam(snap, dt) {
-    const server = snap.lightBeam;
-    if (!server) {
-      this._displayBeam = null;
-      return null;
+  /** 与服务器同速追向目标点，每帧平滑渲染所有搜寻者强光束 */
+  _smoothLightBeams(snap, dt) {
+    const servers = snap.lightBeams ?? [];
+    if (!this._displayBeams) this._displayBeams = new Map();
+    if (!servers.length) {
+      this._displayBeams.clear();
+      return [];
     }
     const speed = this.world.tools.panic.beamSpeed ?? 280;
-    const target = {
-      x: server.targetX ?? server.x,
-      y: server.targetY ?? server.y,
-    };
-    if (!this._displayBeam) {
-      this._displayBeam = { x: server.x, y: server.y };
+    const activeIds = new Set();
+    const result = [];
+    for (const server of servers) {
+      const id = server.seekerId ?? 'default';
+      activeIds.add(id);
+      const target = {
+        x: server.targetX ?? server.x,
+        y: server.targetY ?? server.y,
+      };
+      let display = this._displayBeams.get(id);
+      if (!display) {
+        display = { x: server.x, y: server.y };
+        this._displayBeams.set(id, display);
+      }
+      this._moveToward(display, target, speed * dt);
+      const drift = Math.hypot(display.x - server.x, display.y - server.y);
+      if (drift > 40) {
+        display.x += (server.x - display.x) * 0.35;
+        display.y += (server.y - display.y) * 0.35;
+      }
+      result.push({ x: display.x, y: display.y, radius: server.radius, seekerId: id });
     }
-    this._moveToward(this._displayBeam, target, speed * dt);
-    // 与权威位置偏差过大时软校正，避免长期漂移
-    const drift = Math.hypot(this._displayBeam.x - server.x, this._displayBeam.y - server.y);
-    if (drift > 40) {
-      this._displayBeam.x += (server.x - this._displayBeam.x) * 0.35;
-      this._displayBeam.y += (server.y - this._displayBeam.y) * 0.35;
+    for (const id of this._displayBeams.keys()) {
+      if (!activeIds.has(id)) this._displayBeams.delete(id);
     }
-    return { x: this._displayBeam.x, y: this._displayBeam.y, radius: server.radius };
+    return result;
   }
 
   /** 限制镜头中心，避免 4:3 视口露出地图外空白 */
@@ -104,7 +116,13 @@ export class HiderController {
     // 淘汰后固定全图观战（与搜寻者默认缩放一致），不再接收操作
     if (snap.selfEliminated) {
       this._enterSpectator();
-      return { cam: this.cam, lightBeam: this._smoothLightBeam(snap, dt), spectator: true, viewport: null };
+      return {
+        cam: this.cam,
+        lightBeams: this._smoothLightBeams(snap, dt),
+        sniffBeams: snap.sniffBeams ?? [],
+        spectator: true,
+        viewport: null,
+      };
     }
 
     // 镜头跟随自身蚂蚁
@@ -136,7 +154,8 @@ export class HiderController {
 
     return {
       cam: this.cam,
-      lightBeam: this._smoothLightBeam(snap, dt),
+      lightBeams: this._smoothLightBeams(snap, dt),
+      sniffBeams: snap.sniffBeams ?? [],
       viewport: this.viewport,
     };
   }

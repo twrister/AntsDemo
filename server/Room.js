@@ -289,12 +289,18 @@ export class Room {
   endGame(winner, reason) {
     if (this.loop) { clearInterval(this.loop); this.loop = null; }
     this.state = 'ended';
+    const seeker = this.seeker;
     this.broadcast({
       type: S2C.END,
       winner,
       reason,
       hiderScores: this.game ? this.game._hiderScoreList() : [],
       hiderQuota: this.game ? this.game.hiderQuota : 0,
+      seeker: seeker && this.game ? {
+        name: seeker.name,
+        markHits: this.game.markHits,
+        markMisses: this.game.markMisses,
+      } : null,
     });
     this.onChange?.();
   }

@@ -555,7 +555,7 @@ net.on('end', (m) => {
   $('endTitle').textContent = won ? '胜利！' : '失败';
   $('endTitle').style.color = won ? 'var(--hider)' : 'var(--danger)';
   $('endReason').textContent = m.reason;
-  $('endScore').textContent = formatHiderScoresText(m.hiderScores, m.hiderQuota);
+  renderEndStats(m);
   showScreen('end');
 });
 
@@ -643,13 +643,51 @@ function updateHiderScorePanel(snap) {
   panel.innerHTML = html;
 }
 
-/** 结算页获证进度文案 */
-function formatHiderScoresText(scores, quota) {
-  if (!scores?.length) return '无获证数据';
-  return scores.map(h => {
-    const tag = h.verified ? '已获证' : '未获证';
-    return `${h.label}：${h.score}/${h.quota ?? quota}（${tag}）`;
-  }).join(' · ');
+/** 渲染结算面板：搜寻者标记统计 + 各隐藏者生命/食物 */
+function renderEndStats(m) {
+  const el = $('endStats');
+  if (!el) return;
+  const quota = m.hiderQuota ?? 0;
+  let html = '';
+
+  if (m.seeker) {
+    const miss = m.seeker.markMisses > 0
+      ? `<span class="end-meta">误标 ${m.seeker.markMisses} 次</span>`
+      : '';
+    html += `<div class="end-section">
+      <div class="end-section-title"><span class="role-seeker">搜寻者</span> ${escapeHtml(m.seeker.name)}</div>
+      <div class="end-seeker-stats">
+        <span class="end-stat">成功标记 <strong>${m.seeker.markHits}</strong> 次</span>${miss}
+      </div>
+    </div>`;
+  }
+
+  if (m.hiderScores?.length) {
+    html += `<div class="end-section">
+      <div class="end-section-title">隐藏者</div>
+      <div class="end-hider-list">`;
+    for (const h of m.hiderScores) {
+      const cls = h.verified ? 'end-hider-row verified' : (h.eliminated ? 'end-hider-row eliminated' : 'end-hider-row');
+      const status = h.verified ? '已获证' : (h.eliminated ? '已淘汰' : '进行中');
+      const livesHearts = h.lives != null ? formatLivesHearts(h.lives, h.eliminated) : '';
+      const dot = h.color
+        ? `<span class="hider-color-dot" style="background:${h.color}"></span>`
+        : '';
+      html += `<div class="${cls}">
+        ${dot}<span class="label">${escapeHtml(h.label)}</span>
+        <span class="end-hider-detail">
+          ${livesHearts}
+          <span class="food">食物 ${h.score}/${h.quota ?? quota}</span>
+          <span class="status">${status}</span>
+        </span>
+      </div>`;
+    }
+    html += '</div></div>';
+  } else if (!m.seeker) {
+    html = '<p class="end-empty">无对局数据</p>';
+  }
+
+  el.innerHTML = html;
 }
 
 function updateDevAntStats(snap) {

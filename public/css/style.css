@@ -60,6 +60,51 @@ html, body {
 }
 .hint { font-size: 12px; color: #8a7c60; margin-top: 14px; line-height: 1.5; }
 
+/* 结算面板 */
+.end-panel { width: 420px; text-align: left; }
+.end-panel h1 { text-align: center; margin-bottom: 8px; }
+.end-reason {
+  text-align: center; font-size: 14px; color: #9a8b6e;
+  margin-bottom: 18px; line-height: 1.5;
+}
+.end-stats { margin-bottom: 20px; }
+.end-section + .end-section { margin-top: 14px; }
+.end-section-title {
+  font-size: 12px; color: #9a8b6e; letter-spacing: 1px;
+  margin-bottom: 8px; padding-bottom: 6px;
+  border-bottom: 1px solid rgba(74,61,40,0.45);
+}
+.end-seeker-stats {
+  display: flex; flex-wrap: wrap; gap: 8px 14px;
+  font-size: 14px; padding: 4px 0;
+}
+.end-stat strong { color: var(--accent); font-variant-numeric: tabular-nums; }
+.end-meta { font-size: 13px; color: #8a7c60; }
+.end-hider-list {
+  background: #1c1813; border: 1px solid #4a3d28; border-radius: 8px;
+  overflow: hidden;
+}
+.end-hider-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; font-size: 13px;
+}
+.end-hider-row + .end-hider-row { border-top: 1px solid rgba(74,61,40,0.45); }
+.end-hider-row .label {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.end-hider-detail {
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+}
+.end-hider-detail .food { color: var(--accent); white-space: nowrap; }
+.end-hider-detail .status { font-size: 12px; color: #9a8b6e; white-space: nowrap; }
+.end-hider-row.verified .label,
+.end-hider-row.verified .status { color: var(--hider); }
+.end-hider-row.eliminated .label { color: #8a7a6a; text-decoration: line-through; }
+.end-hider-row.eliminated .status { color: #8a7a6a; }
+.end-empty { text-align: center; font-size: 13px; color: #8a7c60; }
+.end-panel button { margin-top: 4px; }
+
 /* 宽面板（多房间大厅） */
 .wide-panel { width: 480px; max-height: 90vh; overflow-y: auto; text-align: left; }
 .wide-panel h1 { text-align: center; }

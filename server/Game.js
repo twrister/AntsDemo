@@ -51,6 +51,8 @@ export class Game {
     this.toolCooldownUntil = {};
     this._toolsUsed = false;
     this.markCooldownUntil = 0;
+    this.markHits = 0;   // 搜寻者成功标记隐藏者次数
+    this.markMisses = 0; // 搜寻者误标 AI 次数
     this.effects = {};
     this.lightBeam = null; // 强光照射：{ x, y, until }
     this._lastLightBeamUntil = 0; // 上次光束自然结束时刻，用于忽略过期后的残留 active:true
@@ -355,6 +357,7 @@ export class Game {
         ant.pickupProgress = 0;
         ant.depositProgress = 0;
       }
+      this.markHits++;
       this.events.push({ t: 'mark_hit', x: ant.x, y: ant.y, lives: ant.lives });
       if (ant.lives <= 0) {
         ant.eliminated = true;
@@ -366,6 +369,7 @@ export class Game {
       triggerFlee(ant, CONFIG.MISMARK_FLEE_DURATION, { x: ant.x, y: ant.y });
       const { min, max } = CONFIG.MARK_COOLDOWN;
       this.markCooldownUntil = this.now + rand(min, max);
+      this.markMisses++;
       this.events.push({ t: 'mark_miss', x: ant.x, y: ant.y, antId });
     }
   }

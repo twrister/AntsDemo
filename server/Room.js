@@ -1,6 +1,7 @@
 // 房间状态机：等待(lobby) -> 进行(playing) -> 结算(ended)。
 import { CONFIG } from './config.js';
 import { Game } from './Game.js';
+import { getGlobalDevConfig, stripDevConfigMsg } from './globalDevConfig.js';
 import { S2C, ROLE } from './protocol.js';
 
 export class Room {
@@ -22,7 +23,6 @@ export class Room {
     this.state = 'lobby';
     this.game = null;
     this.loop = null;
-    this.pendingDevCfg = null;
     this.matchDurationMin = CONFIG.MATCH_DURATION / 60; // 对局时长 (分钟)，房主可改
   }
 
@@ -181,7 +181,7 @@ export class Room {
       hiders = [{ id: p.id, bot: false, name: p.name }];
       while (hiders.length < CONFIG.MIN_HIDERS) hiders.push({ id: `bot_${botIdx++}`, bot: true });
     }
-    this._beginPlaying(hiders, { debugMode: true, noToolCd: CONFIG.DEBUG_NO_CD });
+    this._beginPlaying(hiders, { debugMode: true });
   }
 
   _resetToLobby() {
@@ -191,23 +191,54 @@ export class Room {
     for (const p of this.players.values()) p.ready = false;
   }
 
-  /** 下发客户端工具配置，合并运行时 devCfg.TOOL_CD 覆盖 */
+  /** 下发客户端工具配置，合并全局/运行时 devCfg 覆盖 */
   _toolsForClient(game) {
     const tools = JSON.parse(JSON.stringify(CONFIG.TOOLS));
-    const overrides = game?.devCfg?.TOOL_CD;
-    if (overrides) {
-      for (const [k, cd] of Object.entries(overrides)) {
+    const cfg = game?.devCfg;
+    if (cfg?.TOOL_CD) {
+      for (const [k, cd] of Object.entries(cfg.TOOL_CD)) {
         if (tools[k]) tools[k].cd = cd;
       }
     }
+    if (cfg?.BEAM_SPEED !== undefined) {
+      if (tools.panic) tools.panic.beamSpeed = cfg.BEAM_SPEED;
+      if (tools.sniff) tools.sniff.beamSpeed = cfg.BEAM_SPEED;
+    }
+    if (cfg?.SNIFF_RADIUS !== undefined && tools.sniff) {
+      tools.sniff.radius = cfg.SNIFF_RADIUS;
+    }
     return tools;
+  }
+
+  /** 全局调参热更新：进行中对局立即 setDevConfig，并同步客户端工具展示 */
+  applyGlobalDevConfig(msg) {
+    const params = stripDevConfigMsg(msg);
+    if (this.game) {
+      this.game.setDevConfig(params);
+      this._broadcastDevTools();
+    }
+  }
+
+  /** 调参变更后推送工具 CD / 光束速度等给本房间玩家（含 3000 联机） */
+  _broadcastDevTools() {
+    if (!this.game || this.state !== 'playing') return;
+    const payload = {
+      type: S2C.DEV_TOOLS,
+      tools: this._toolsForClient(this.game),
+      noToolCd: this.game.noToolCd,
+    };
+    for (const p of this.players.values()) this.send(p, payload);
   }
 
   _beginPlaying(hiders, opts = {}) {
     this.state = 'playing';
     const matchDuration = CONFIG.matchDurationSeconds(this.matchDurationMin);
-    this.game = new Game(hiders, { ...opts, matchDuration });
-    if (this.pendingDevCfg) this.game.setDevConfig(this.pendingDevCfg);
+    const globalCfg = getGlobalDevConfig();
+    const noToolCd = globalCfg?.DEBUG_NO_CD !== undefined
+      ? !!globalCfg.DEBUG_NO_CD
+      : !!opts.noToolCd;
+    this.game = new Game(hiders, { ...opts, matchDuration, noToolCd });
+    if (globalCfg) this.game.setDevConfig(globalCfg);
 
     for (const p of this.players.values()) {
       const ant = p.role === ROLE.HIDER ? this.game.ants.find(a => a.playerId === p.id) : null;
@@ -314,11 +345,6 @@ export class Room {
       case 'tool_beam': if (g && p.role === ROLE.SEEKER) g.setToolBeam(msg.tool, msg.x, msg.y, !!msg.active); break;
       case 'place_fake_food': if (g && p.role === ROLE.SEEKER) g.placeFakeFood(msg.x, msg.y); break;
       case 'cursor': if (g && p.role === ROLE.SEEKER) g.setSeekerCursor(msg.x, msg.y); break;
-      case 'dev_config': {
-        this.pendingDevCfg = msg;
-        if (g) g.setDevConfig(msg);
-        break;
-      }
     }
   }
 

@@ -33,6 +33,7 @@ export const S2C = {
   SNAPSHOT:   'snapshot',   // 10Hz 世界快照
   EVENT:      'event',
   END:        'end',        // { winner, reason }
+  DEV_TOOLS:  'dev_tools',  // 全局调参变更时同步客户端工具展示 { tools, noToolCd }
 };
 
 export const ROLE = { SEEKER: 'seeker', HIDER: 'hider' };

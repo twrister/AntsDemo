@@ -108,6 +108,18 @@ function applyToolCdToWorld(toolCd) {
   }
 }
 
+/** 服务器全局调参推送：同步 3000 联机端的工具展示与光束参数 */
+function applyDevToolsFromServer(m) {
+  if (!world?.tools || !m.tools) return;
+  for (const [key, def] of Object.entries(m.tools)) {
+    world.tools[key] = { ...world.tools[key], ...def };
+  }
+  if (m.noToolCd !== undefined) {
+    world.noToolCd = !!m.noToolCd;
+    if (controller?.noToolCd !== undefined) controller.noToolCd = !!m.noToolCd;
+  }
+}
+
 function restoreDevConfig() {
   if (!DEBUG_MODE) return;
   let saved = {};
@@ -506,6 +518,8 @@ net.on('lobby', (m) => {
   $('canStartHint').textContent = isHost && !m.canStart ? m.canStartReason : '';
   updateMatchDurationUi(m.matchDurationMin, isHost);
 });
+
+net.on('dev_tools', applyDevToolsFromServer);
 
 net.on('start', (m) => {
   role = m.role;

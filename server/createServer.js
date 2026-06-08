@@ -18,17 +18,32 @@ const MIME = {
 };
 
 /**
- * @param {{ port: number, allowDebug?: boolean, defaultPage?: string, label?: string }} opts
+ * @param {{
+ *   port: number,
+ *   allowDebug?: boolean,
+ *   defaultPage?: string,
+ *   label?: string,
+ *   registerRooms?: (rooms: Map<string, import('./Room.js').Room>) => void,
+ *   onDevConfig?: (msg: object) => void,
+ * }} opts
  * @returns {import('http').Server}
  */
 export function createServer(opts) {
-  const { port, allowDebug = false, defaultPage = 'index.html', label = '' } = opts;
+  const {
+    port,
+    allowDebug = false,
+    defaultPage = 'index.html',
+    label = '',
+    registerRooms = null,
+    onDevConfig = null,
+  } = opts;
 
   let nextRoomId = 1;
   let nextPlayerId = 1;
 
   /** roomId -> Room */
   const rooms = new Map();
+  registerRooms?.(rooms);
 
   /** playerId -> { ws, roomId | null } */
   const connections = new Map();
@@ -159,7 +174,11 @@ export function createServer(opts) {
         return;
       }
 
-      if (msg.type === 'dev_config' && !allowDebug) return;
+      if (msg.type === 'dev_config') {
+        if (!allowDebug) return;
+        onDevConfig?.(msg);
+        return;
+      }
 
       if (conn.roomId !== null) {
         const room = rooms.get(conn.roomId);

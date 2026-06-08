@@ -807,19 +807,8 @@ function updateDevAntStats(snap) {
 function handleEvent(e) {
   switch (e.t) {
     case 'mark_hit': {
-      const lives = e.lives ?? 0;
-      const label = e.label || '隐藏者';
-      if (role === ROLE.SEEKER) {
-        toast(lives > 0 ? `标记命中！${label}剩余 ${lives} 条命` : `标记命中！${label}生命耗尽`, 'good');
-      } else if (e.playerId === myPlayerId) {
-        toast(lives > 0
-          ? `你被标记了！剩余 ${lives} 条命，冻结 10 秒`
-          : '你被标记了！生命耗尽，即将淘汰', 'bad');
-      } else {
-        toast(lives > 0
-          ? `${label} 被标记了！剩余 ${lives} 条命`
-          : `${label} 被标记！生命耗尽，即将淘汰`, 'bad');
-      }
+      const name = e.label || '隐藏者';
+      toast(`${name}被标记`, 'bad');
       break;
     }
     case 'hider_respawn':
@@ -830,10 +819,8 @@ function handleEvent(e) {
       else toast(`${e.label || '隐藏者'} 已淘汰`, 'good');
       break;
     case 'mark_miss':
-      if (role === ROLE.SEEKER) {
-        toast('误标记！AI 逃窜中，标记冷却', 'bad');
-        controller?.onMarkMiss?.();
-      }
+      toast('误标记！AI 逃窜中，标记冷却', 'bad');
+      controller?.onMarkMiss?.();
       break;
     case 'food_pickup': if (role === ROLE.HIDER) toast('拿到食物，送回巢穴', 'good'); break;
     case 'score':
@@ -842,9 +829,9 @@ function handleEvent(e) {
     case 'hider_verified':
       toast(role === ROLE.SEEKER
         ? `${e.label || '隐藏者'} 已获证，外观现出真色且不可标记`
-        : `${e.label || '隐藏者'} 已获证！`, role === ROLE.SEEKER ? 'bad' : 'good');
+        : `${e.label || '隐藏者'} 已获证！`, 'good');
       break;
-    case 'tool':       if (role === ROLE.SEEKER) toast('使用了工具', 'good'); break;
+    case 'tool':       if (role === ROLE.SEEKER) toast('使用了工具', ''); break;
     case 'fake_food_warn':
       if (role === ROLE.HIDER) toast('这是假食物！', 'bad');
       else if (role === ROLE.SEEKER) toast('隐藏者触碰了假食物', 'good');
@@ -852,11 +839,10 @@ function handleEvent(e) {
   }
 }
 
-/** 局内事件弹窗：good 绿色正向，bad 红色负面 */
 function toast(text, kind) {
   const box = $('toast');
   const el = document.createElement('div');
-  el.className = 'toast-msg ' + (kind === 'bad' ? 'bad' : 'good');
+  el.className = 'toast-msg ' + (kind || '');
   el.textContent = text;
   box.appendChild(el);
   setTimeout(() => el.remove(), 2200);

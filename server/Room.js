@@ -252,9 +252,10 @@ export class Room {
     const matchDuration = CONFIG.matchDurationSeconds(this.matchDurationMin);
     const hiderFoodQuota = this.hiderFoodQuota;
     const globalCfg = getGlobalDevConfig();
+    // 全局 DEBUG_NO_CD 优先；调试单机默认无工具 CD（与 README 调试模式一致）
     const noToolCd = globalCfg?.DEBUG_NO_CD !== undefined
       ? !!globalCfg.DEBUG_NO_CD
-      : !!opts.noToolCd;
+      : (opts.debugMode ? true : !!opts.noToolCd);
     this.game = new Game(hiders, { ...opts, matchDuration, hiderFoodQuota, noToolCd });
     if (globalCfg) this.game.setDevConfig(globalCfg);
 
@@ -272,7 +273,7 @@ export class Room {
           tools: this._toolsForClient(this.game),
           markCooldown: this._markCooldownForClient(this.game),
           debugMode: !!opts.debugMode,
-          noToolCd: !!opts.noToolCd,
+          noToolCd: this.game.noToolCd,
           matchDuration,
           hidingSpots: this.game.hidingSpots.map((s) => ({
             x: Math.round(s.x),

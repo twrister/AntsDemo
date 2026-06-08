@@ -443,7 +443,11 @@ $('hiderFoodQuotaSelect')?.addEventListener('change', () => {
 // ---- 连接 ----
 
 async function ensureConnected() {
-  if (!net.ws) await net.connect();
+  if (!net.ws) {
+    await net.connect();
+    // 调试端口连接后立即推送本地调参，使 3000 正式服开局能读到同一份全局配置
+    if (DEBUG_MODE) sendDevConfig();
+  }
 }
 
 // ---- 房间浏览 ----

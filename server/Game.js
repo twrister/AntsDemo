@@ -358,7 +358,10 @@ export class Game {
         ant.depositProgress = 0;
       }
       this.markHits++;
-      this.events.push({ t: 'mark_hit', x: ant.x, y: ant.y, lives: ant.lives });
+      this.events.push({
+        t: 'mark_hit', x: ant.x, y: ant.y, lives: ant.lives,
+        antId: ant.id, playerId: ant.playerId, label: ant.hiderLabel,
+      });
       if (ant.lives <= 0) {
         ant.eliminated = true;
         this.events.push({ t: 'hider_eliminated', antId: ant.id, label: ant.hiderLabel });

@@ -710,12 +710,17 @@ function handleEvent(e) {
   switch (e.t) {
     case 'mark_hit': {
       const lives = e.lives ?? 0;
+      const label = e.label || '隐藏者';
       if (role === ROLE.SEEKER) {
         toast(lives > 0 ? `标记命中！对方剩余 ${lives} 条命` : '标记命中！隐藏者生命耗尽', 'bad');
-      } else {
+      } else if (e.playerId === myPlayerId) {
         toast(lives > 0
           ? `你被标记了！剩余 ${lives} 条命，冻结 10 秒`
           : '你被标记了！生命耗尽，即将淘汰', 'bad');
+      } else {
+        toast(lives > 0
+          ? `${label} 被标记了！剩余 ${lives} 条命`
+          : `${label} 被标记！生命耗尽，即将淘汰`, 'bad');
       }
       break;
     }

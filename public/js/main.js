@@ -49,6 +49,10 @@ const MARK_COOLDOWN_MIN = 0;
 const MARK_COOLDOWN_MAX = 5;
 const MARK_COOLDOWN_DEFAULT = 3;
 
+const BEAM_SPEED_MIN = 100;
+const BEAM_SPEED_MAX = 1200;
+const BEAM_SPEED_DEFAULT = 280;
+
 const DEV_DEFAULTS = {
   AI_ANT_COUNT: 30,
   AI_SPEED_BASE: 60,
@@ -57,7 +61,7 @@ const DEV_DEFAULTS = {
   AI_SPEED: { sprint: 1.5, carry: 0.8, carryRich: 0.5 },
   FOOD_COUNT: 5,
   FOOD_CAPACITY: 60,
-  BEAM_SPEED: 280,
+  BEAM_SPEED: BEAM_SPEED_DEFAULT,
   SNIFF_RADIUS: 100,
   MARK_COOLDOWN: MARK_COOLDOWN_DEFAULT,
   TOOL_CD: Object.fromEntries(
@@ -75,6 +79,13 @@ function readToolCdFromDom() {
     if (inp) toolCd[key] = parseInt(inp.value, 10);
   }
   return toolCd;
+}
+
+/** 归一化光束跟随速度（强光/嗅探共用） */
+function normalizeBeamSpeed(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n)) return BEAM_SPEED_DEFAULT;
+  return Math.max(BEAM_SPEED_MIN, Math.min(BEAM_SPEED_MAX, Math.round(n)));
 }
 
 /** 归一化误标冷却（兼容旧版 min/max 区间配置） */
@@ -111,7 +122,7 @@ function persistDevConfig() {
     },
     FOOD_COUNT: parseInt($('devFoodCount').value, 10),
     FOOD_CAPACITY: parseInt($('devFoodCapacity').value, 10),
-    BEAM_SPEED: parseInt($('devBeamSpeed').value, 10),
+    BEAM_SPEED: normalizeBeamSpeed(parseInt($('devBeamSpeed').value, 10)),
     SNIFF_RADIUS: parseInt($('devSniffRadius').value, 10),
     TOOL_CD: readToolCdFromDom(),
     MARK_COOLDOWN: readMarkCooldownFromDom(),
@@ -164,6 +175,7 @@ function restoreDevConfig() {
     AI_SPEED: { ...DEV_DEFAULTS.AI_SPEED, ...(saved.AI_SPEED || {}) },
     TOOL_CD: { ...DEV_DEFAULTS.TOOL_CD, ...(saved.TOOL_CD || {}) },
     MARK_COOLDOWN: normalizeMarkCooldown(saved.MARK_COOLDOWN ?? DEV_DEFAULTS.MARK_COOLDOWN),
+    BEAM_SPEED: normalizeBeamSpeed(saved.BEAM_SPEED ?? DEV_DEFAULTS.BEAM_SPEED),
   };
   const antCount = Math.max(AI_ANT_COUNT_MIN, Math.min(AI_ANT_COUNT_MAX, c.AI_ANT_COUNT));
 
@@ -226,13 +238,13 @@ function sendDevConfig() {
     },
     FOOD_COUNT: parseInt($('devFoodCount').value, 10),
     FOOD_CAPACITY: parseInt($('devFoodCapacity').value, 10),
-    BEAM_SPEED: parseInt($('devBeamSpeed').value, 10),
+    BEAM_SPEED: normalizeBeamSpeed(parseInt($('devBeamSpeed').value, 10)),
     SNIFF_RADIUS: parseInt($('devSniffRadius').value, 10),
     TOOL_CD: readToolCdFromDom(),
     MARK_COOLDOWN: readMarkCooldownFromDom(),
     DEBUG_NO_CD: $('devNoCdCheck').checked,
   });
-  applyBeamSpeedToWorld(parseInt($('devBeamSpeed').value, 10));
+  applyBeamSpeedToWorld(normalizeBeamSpeed(parseInt($('devBeamSpeed').value, 10)));
   applySniffRadiusToWorld(parseInt($('devSniffRadius').value, 10));
   applyToolCdToWorld(readToolCdFromDom());
   applyMarkCooldownToWorld(readMarkCooldownFromDom());

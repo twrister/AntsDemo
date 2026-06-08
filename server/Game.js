@@ -163,7 +163,7 @@ export class Game {
 
   /** 强光/嗅探光束跟随速度（像素/秒，开发者工具可热改） */
   _beamSpeed() {
-    return this.devCfg.BEAM_SPEED ?? CONFIG.TOOLS.panic.beamSpeed ?? 280;
+    return this.devCfg.BEAM_SPEED ?? CONFIG.BEAM_SPEED ?? 280;
   }
 
   /** 误标后标记冷却 (秒)，开发者工具可热改 */
@@ -988,7 +988,10 @@ export class Game {
       this._setFoodCapacity(+params.FOOD_CAPACITY);
     }
     if (params.BEAM_SPEED !== undefined) {
-      this.devCfg.BEAM_SPEED = Math.max(50, Math.min(800, +params.BEAM_SPEED));
+      this.devCfg.BEAM_SPEED = Math.max(
+        CONFIG.BEAM_SPEED_MIN,
+        Math.min(CONFIG.BEAM_SPEED_MAX, +params.BEAM_SPEED),
+      );
     }
     if (params.SNIFF_RADIUS !== undefined) {
       this.devCfg.SNIFF_RADIUS = Math.max(50, Math.min(300, +params.SNIFF_RADIUS));

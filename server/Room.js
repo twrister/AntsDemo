@@ -212,10 +212,9 @@ export class Room {
         if (tools[k]) tools[k].cd = cd;
       }
     }
-    if (cfg?.BEAM_SPEED !== undefined) {
-      if (tools.panic) tools.panic.beamSpeed = cfg.BEAM_SPEED;
-      if (tools.sniff) tools.sniff.beamSpeed = cfg.BEAM_SPEED;
-    }
+    const beamSpeed = cfg?.BEAM_SPEED ?? CONFIG.BEAM_SPEED;
+    if (tools.panic) tools.panic.beamSpeed = beamSpeed;
+    if (tools.sniff) tools.sniff.beamSpeed = beamSpeed;
     if (cfg?.SNIFF_RADIUS !== undefined && tools.sniff) {
       tools.sniff.radius = cfg.SNIFF_RADIUS;
     }

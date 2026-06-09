@@ -671,7 +671,7 @@ export class Game {
     ant.vx = ant.vy = 0;
     ant.sprinting = false;
     src.warnUntil = this.now + warnDur;
-    this.events.push({ t: 'fake_food_warn', x: src.x, y: src.y, antId: ant.id });
+    this.events.push({ t: 'fake_food_warn', x: src.x, y: src.y, antId: ant.id, playerId: ant.playerId });
     return true;
   }
 

@@ -890,7 +890,7 @@ function handleEvent(e) {
       break;
     case 'tool':       if (role === ROLE.SEEKER) toast('使用了工具', 'good'); break;
     case 'fake_food_warn':
-      if (role === ROLE.HIDER) toast('这是假食物！', 'bad');
+      if (role === ROLE.HIDER && e.playerId === myPlayerId) toast('这是假食物！', 'bad');
       else if (role === ROLE.SEEKER) toast('隐藏者触碰了假食物', 'good');
       break;
   }

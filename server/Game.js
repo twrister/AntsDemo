@@ -818,7 +818,7 @@ export class Game {
     }
   }
 
-  /** 已完成获证的排前，按胜利用时从快到慢；未完成者排后 */
+  /** 已完成获胜的排前，按胜利用时从快到慢；未完成者排后 */
   _sortHiderScores(list) {
     return list.sort((a, b) => {
       const aDone = a.completeTime != null;
@@ -830,7 +830,7 @@ export class Game {
     });
   }
 
-  /** 每位隐藏者的获证进度（供 HUD 展示） */
+  /** 每位隐藏者的获胜进度（供 HUD 展示） */
   _hiderScoreList() {
     const list = this.ants
       .filter(a => a.isHider)
@@ -865,7 +865,7 @@ export class Game {
           y: Math.round(a.y),
           angle: +a.angle.toFixed(2),
         };
-        // 搜寻者视角：躲藏点内且未获证 → 仅下发影子所需字段
+        // 搜寻者视角：躲藏点内且未获胜 → 仅下发影子所需字段
         if (role === ROLE.SEEKER && this._isInsideHidingSpot(a) && !a.verified) {
           return { ...base, hiding: true };
         }

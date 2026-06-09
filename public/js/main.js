@@ -802,7 +802,7 @@ function formatVictoryTime(sec) {
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-/** 渲染左上角各隐藏者获证进度 */
+/** 渲染左上角各隐藏者获胜进度 */
 function updateHiderScorePanel(snap) {
   const panel = $('hiderScorePanel');
   if (!panel || !snap?.hiderScores?.length) {
@@ -810,7 +810,7 @@ function updateHiderScorePanel(snap) {
     return;
   }
   const quota = snap.hiderQuota ?? snap.hiderScores[0]?.quota ?? 0;
-  let html = `<div class="panel-title">隐藏者获证 ${quota > 0 ? `(目标 ${quota})` : ''}</div>`;
+  let html = `<div class="panel-title">隐藏者获胜 ${quota > 0 ? `(目标 ${quota})` : ''}</div>`;
   for (const h of snap.hiderScores) {
     const cls = h.verified ? 'hider-score-row verified' : (h.eliminated ? 'hider-score-row eliminated' : 'hider-score-row');
     const dot = role === ROLE.HIDER && h.color

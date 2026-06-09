@@ -35,7 +35,7 @@ export const CONFIG = {
     '#6fc36f', '#5eb8e8', '#e8a05e', '#c36fd4',
     '#e85e7a', '#5ee8c8', '#b8e85e', '#8e5ee8', '#e8d45e',
   ],
-  /** 每位隐藏者获证所需食物份数（固定值，与人数无关；房主可在房间中配置） */
+  /** 每位隐藏者获胜所需食物份数（固定值，与人数无关；房主可在房间中配置） */
   HIDER_FOOD_QUOTA: 10,
   HIDER_FOOD_QUOTA_MIN: 1,
   HIDER_FOOD_QUOTA_MAX: 30,

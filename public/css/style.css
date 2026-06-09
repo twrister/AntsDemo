@@ -239,7 +239,7 @@ html, body {
   display: flex; gap: 14px; pointer-events: none; align-items: center;
 }
 
-/* 左上角：各隐藏者获证进度 */
+/* 左上角：各隐藏者获胜进度 */
 .hider-score-panel {
   position: absolute; top: 16px; left: 16px;
   min-width: 168px; max-width: 240px;

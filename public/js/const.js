@@ -1,6 +1,9 @@
 // 客户端共享常量 (与服务器 protocol.js 对应)
 export const ROLE = { SEEKER: 'seeker', HIDER: 'hider' };
 
+/** 场景土壤默认底色（开发者工具可调） */
+export const GROUND_FILL_DEFAULT = '#6a7268';
+
 /**
  * 计算使整个世界完整落入视口的 zoom。
  * 用于搜寻者默认概览：全图可见，暗角仍限制有效观察区。

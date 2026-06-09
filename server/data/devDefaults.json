@@ -18,5 +18,6 @@
     "fakeFood": 20
   },
   "MARK_COOLDOWN": 2,
-  "DEBUG_NO_CD": false
+  "DEBUG_NO_CD": false,
+  "SOIL_FILL": "#433b32"
 }

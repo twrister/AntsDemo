@@ -4,7 +4,7 @@ import { Renderer } from './renderer.js';
 import { Input } from './input.js';
 import { SeekerController } from './seeker.js';
 import { HiderController } from './hider.js';
-import { ROLE } from './const.js';
+import { ROLE, GROUND_FILL_DEFAULT } from './const.js';
 
 const net = new Net();
 const canvas = document.getElementById('canvas');
@@ -18,6 +18,8 @@ let controller = null;
 let world = null;
 let running = false;
 let showPheromone = false;
+/** 当前土壤底色（开发者工具可调，实时生效） */
+let soilFill = GROUND_FILL_DEFAULT;
 
 // ---- DOM helpers ----
 const $ = (id) => document.getElementById(id);
@@ -73,9 +75,29 @@ const DEV_DEFAULTS = {
     Object.entries(TOOL_CD_META).map(([k, m]) => [k, m.default]),
   ),
   DEBUG_NO_CD: false,
+  SOIL_FILL: GROUND_FILL_DEFAULT,
 };
 
 const DEV_STORAGE_KEY = 'antsDemo_devCfg';
+
+/** 校验并归一化十六进制颜色 */
+function normalizeHexColor(value, fallback) {
+  if (typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)) return value.toLowerCase();
+  return fallback;
+}
+
+/** 归一化土壤底色（兼容旧版 GROUND_COLORS.fill） */
+function normalizeSoilFill(raw, fallback = GROUND_FILL_DEFAULT) {
+  if (typeof raw === 'string') return normalizeHexColor(raw, fallback);
+  if (raw && typeof raw === 'object' && raw.fill) return normalizeHexColor(raw.fill, fallback);
+  return fallback;
+}
+
+/** 将土壤底色同步到渲染与 Canvas 占位色 */
+function applySoilFill(fill) {
+  soilFill = normalizeSoilFill(fill);
+  document.documentElement.style.setProperty('--soil', soilFill);
+}
 
 /** 服务端保存的自定义默认值（所有版本/端口共用） */
 let userDevDefaults = {};
@@ -127,6 +149,10 @@ function getEffectiveDevDefaults() {
       userDevDefaults.MARK_COOLDOWN ?? DEV_DEFAULTS.MARK_COOLDOWN,
     ),
     BEAM_SPEED: normalizeBeamSpeed(userDevDefaults.BEAM_SPEED ?? DEV_DEFAULTS.BEAM_SPEED),
+    SOIL_FILL: normalizeSoilFill(
+      userDevDefaults.SOIL_FILL ?? userDevDefaults.GROUND_COLORS,
+      DEV_DEFAULTS.SOIL_FILL,
+    ),
   };
 }
 
@@ -140,6 +166,10 @@ function normalizeDevConfig(raw) {
     TOOL_CD: { ...base.TOOL_CD, ...(raw.TOOL_CD || {}) },
     MARK_COOLDOWN: normalizeMarkCooldown(raw.MARK_COOLDOWN ?? base.MARK_COOLDOWN),
     BEAM_SPEED: normalizeBeamSpeed(raw.BEAM_SPEED ?? base.BEAM_SPEED),
+    SOIL_FILL: normalizeSoilFill(
+      raw.SOIL_FILL ?? raw.GROUND_COLORS ?? base.SOIL_FILL,
+      base.SOIL_FILL,
+    ),
   };
   c.AI_ANT_COUNT = Math.max(DEV_AI_ANT_COUNT_MIN, Math.min(DEV_AI_ANT_COUNT_MAX, c.AI_ANT_COUNT));
   return c;
@@ -164,7 +194,13 @@ function readDevConfigFromDom() {
     TOOL_CD: readToolCdFromDom(),
     MARK_COOLDOWN: readMarkCooldownFromDom(),
     DEBUG_NO_CD: $('devNoCdCheck').checked,
+    SOIL_FILL: readSoilFillFromDom(),
   };
+}
+
+/** 从开发者面板读取土壤底色 */
+function readSoilFillFromDom() {
+  return normalizeSoilFill($('devGroundFill')?.value);
 }
 
 function persistDevConfig() {
@@ -255,13 +291,17 @@ function applyDevConfigToDom(c) {
   applySniffRadiusToWorld(c.SNIFF_RADIUS);
   applyToolCdToWorld(c.TOOL_CD);
   applyMarkCooldownToWorld(c.MARK_COOLDOWN);
+  if ($('devGroundFill')) {
+    $('devGroundFill').value = c.SOIL_FILL;
+    $('devGroundFillHex').textContent = c.SOIL_FILL;
+    applySoilFill(c.SOIL_FILL);
+  }
 }
 
+/** 从服务端配置文件恢复调参（开局默认，不读 localStorage） */
 function restoreDevConfig() {
   if (!DEBUG_MODE) return;
-  let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(DEV_STORAGE_KEY) || '{}'); } catch (_) {}
-  applyDevConfigToDom(normalizeDevConfig(saved));
+  applyDevConfigToDom(getEffectiveDevDefaults());
 }
 
 /** 从服务端拉取共用默认值 */
@@ -293,7 +333,6 @@ async function saveUserDevDefaults() {
 
 function sendDevConfig() {
   if (!DEBUG_MODE) return;
-  persistDevConfig();
   net.send({
     type: 'dev_config',
     AI_SPEED_BASE: parseFloat($('devSpeedBase').value),
@@ -317,6 +356,18 @@ function sendDevConfig() {
   applySniffRadiusToWorld(parseInt($('devSniffRadius').value, 10));
   applyToolCdToWorld(readToolCdFromDom());
   applyMarkCooldownToWorld(readMarkCooldownFromDom());
+}
+
+/** 绑定土壤底色拾色器：即时预览并写入本地配置 */
+function bindSoilFillInput() {
+  const inp = $('devGroundFill');
+  const hexEl = $('devGroundFillHex');
+  if (!inp || !hexEl) return;
+  inp.addEventListener('input', () => {
+    hexEl.textContent = inp.value.toLowerCase();
+    applySoilFill(readSoilFillFromDom());
+    persistDevConfig();
+  });
 }
 
 function bindSlider(id, valId, decimals) {
@@ -352,6 +403,7 @@ function buildDevToolCdSliders() {
 
 if (DEBUG_MODE) {
   buildDevToolCdSliders();
+  bindSoilFillInput();
   fetchUserDevDefaults().then(() => restoreDevConfig());
   bindSlider('devAntCount', 'devAntCountVal', 0);
   bindSlider('devSpeedBase', 'devSpeedBaseVal', 0);
@@ -368,7 +420,6 @@ if (DEBUG_MODE) {
 
   $('devSaveDefaults').addEventListener('click', () => saveUserDevDefaults());
   $('devReset').addEventListener('click', () => {
-    localStorage.removeItem(DEV_STORAGE_KEY);
     applyDevConfigToDom(getEffectiveDevDefaults());
     sendDevConfig();
   });
@@ -698,10 +749,13 @@ net.on('lobby', (m) => {
 
 net.on('dev_tools', applyDevToolsFromServer);
 
-net.on('start', (m) => {
+net.on('start', async (m) => {
   role = m.role;
   world = m.world;
-  restoreDevConfig();
+  if (DEBUG_MODE) {
+    await fetchUserDevDefaults();
+    restoreDevConfig();
+  }
   showScreen('game');
   if (world?.matchDuration) {
     const left = Math.ceil(world.matchDuration);
@@ -749,7 +803,10 @@ function loop(now) {
   const snap = net.interpolated();
   if (snap && controller) {
     const opts = controller.update(snap, dt);
-    renderer.draw(snap, opts.cam, { ...opts, role, world, time: now, showPheromone, foodActionTime: snap.foodActionTime });
+    renderer.draw(snap, opts.cam, {
+      ...opts, role, world, time: now, showPheromone, foodActionTime: snap.foodActionTime,
+      soilFill,
+    });
     updateHud(snap);
   }
   requestAnimationFrame(loop);

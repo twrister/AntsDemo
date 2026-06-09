@@ -2,7 +2,7 @@
 
 :root {
   --bg: #14110c;
-  --soil: #2b2419;
+  --soil: #6a7268;
   --accent: #e0a93b;
   --hider: #6fc36f;
   --success: #6fc36f;
@@ -382,6 +382,13 @@ html, body {
 }
 .dev-row input[type="checkbox"] {
   width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent);
+}
+.dev-color-row input[type="color"] {
+  flex: 0 0 40px; width: 40px; height: 28px; padding: 0;
+  border: 1px solid #4a3d28; border-radius: 4px; cursor: pointer; background: none;
+}
+.dev-hex {
+  flex: 1; font-size: 11px; color: #8a7c60; font-family: ui-monospace, monospace;
 }
 .dev-btn-row {
   display: flex; gap: 8px; margin-top: 12px;

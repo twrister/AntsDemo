@@ -1,6 +1,7 @@
 // 房间状态机：等待(lobby) -> 进行(playing) -> 结算(ended)。
 import { CONFIG } from './config.js';
 import { Game } from './Game.js';
+import { getDevDefaults } from './devDefaultsStore.js';
 import { getGlobalDevConfig, stripDevConfigMsg } from './globalDevConfig.js';
 import { S2C, ROLE } from './protocol.js';
 
@@ -25,9 +26,11 @@ export class Room {
     this.state = 'lobby';
     this.game = null;
     this.loop = null;
+    const saved = getDevDefaults();
     this.matchDurationMin = CONFIG.MATCH_DURATION / 60; // 对局时长 (分钟)，房主可改
     this.hiderFoodQuota = CONFIG.HIDER_FOOD_QUOTA;     // 获胜所需食物数，房主可改
-    this.aiAntCount = CONFIG.AI_ANT_COUNT;             // 地图 AI 蚂蚁数量，房主可改
+    // 新建房间时优先采用 devDefaults.json 中的 AI 数量
+    this.aiAntCount = CONFIG.aiAntCount(saved?.AI_ANT_COUNT ?? CONFIG.AI_ANT_COUNT);
   }
 
   get seeker() { return [...this.players.values()].find(p => p.role === ROLE.SEEKER); }

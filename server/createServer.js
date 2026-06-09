@@ -135,6 +135,7 @@ export function createServer(opts) {
           const raw = await readBody(req);
           const cfg = JSON.parse(raw || '{}');
           const saved = setDevDefaults(cfg);
+          onDevConfig?.(saved);
           res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
           res.end(JSON.stringify(saved));
         } catch {

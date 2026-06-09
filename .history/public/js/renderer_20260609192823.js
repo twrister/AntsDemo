@@ -673,7 +673,7 @@ export class Renderer {
     const cx = W / 2, cy = H / 2;
     const g = ctx.createRadialGradient(cx, cy, radiusPx * 0.6, cx, cy, radiusPx * 1.25);
     g.addColorStop(0, 'rgba(0,0,0,0)');
-    g.addColorStop(1, 'rgba(8,6,3,0.6)');
+    g.addColorStop(1, 'rgba(8,6,3,0.28)');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
 

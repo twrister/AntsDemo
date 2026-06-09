@@ -326,6 +326,12 @@ export class Game {
       eliminated: false, // 生命归零或玩家离场等永久出局
       vx: 0, vy: 0,
       sprinting: false,
+      dashing: false,
+      dashDx: 0,
+      dashDy: 0,
+      dashDistLeft: 0,
+      dashSpeed: 0,
+      dashCooldownUntil: 0,
       pickupProgress: 0,
       depositProgress: 0,
       tripTime: isHider ? rand(0, CONFIG.PHEROMONE.TAU) : 0,
@@ -361,8 +367,55 @@ export class Game {
   /** 隐藏者冲刺开关：按住空格时叠加加速倍率 */
   setHiderSprint(pid, active) {
     const ant = this.ants.find(a => a.playerId === pid);
-    if (!ant || this._isMarked(ant) || this._isStunned(ant) || ant.eliminated) return;
+    if (!ant || this._isMarked(ant) || this._isStunned(ant) || ant.eliminated || ant.dashing) return;
     ant.sprinting = active;
+  }
+
+  /** 隐藏者突进技能剩余冷却 (秒) */
+  _hiderDashCdLeft(ant) {
+    if (this.noToolCd) return 0;
+    return Math.max(0, +(ant.dashCooldownUntil - this.now).toFixed(1));
+  }
+
+  /** 读取突进位移距离 (px)，devCfg 可覆盖 config 默认值 */
+  _hiderDashDistance() {
+    const def = CONFIG.HIDER_TOOLS.dash;
+    const override = this.devCfg.HIDER_DASH_DISTANCE;
+    if (override !== undefined) return Math.max(40, Math.min(400, +override));
+    return def.distance ?? 120;
+  }
+
+  /** 隐藏者突进：朝当前移动方向（静止时朝面向）快速位移一段距离 */
+  useHiderDash(pid) {
+    const ant = this.ants.find(a => a.playerId === pid);
+    if (!ant || !ant.isHider || ant.bot || this.over) return;
+    if (this._isMarked(ant) || this._isStunned(ant) || ant.eliminated || ant.dashing) return;
+    if (!this.noToolCd && this.now < ant.dashCooldownUntil) return;
+
+    const def = CONFIG.HIDER_TOOLS.dash;
+    const distance = this._hiderDashDistance();
+    const duration = def.duration ?? 0.15;
+
+    let dx = ant.vx;
+    let dy = ant.vy;
+    if (!dx && !dy) {
+      dx = Math.cos(ant.angle);
+      dy = Math.sin(ant.angle);
+    }
+    const len = Math.hypot(dx, dy) || 1;
+    dx /= len;
+    dy /= len;
+
+    ant.dashing = true;
+    ant.dashDx = dx;
+    ant.dashDy = dy;
+    ant.dashDistLeft = distance;
+    ant.dashSpeed = distance / Math.max(0.05, duration);
+    ant.sprinting = false;
+    if (!this.noToolCd) {
+      ant.dashCooldownUntil = this.now + (def.cd ?? 10);
+    }
+    this.events.push({ t: 'hider_dash', antId: ant.id, x: ant.x, y: ant.y });
   }
 
   /** 记录搜寻者鼠标世界坐标，供隐藏者方显示 */
@@ -389,6 +442,8 @@ export class Game {
       ant.markedUntil = this.now + CONFIG.HIDER_MARK_DURATION;
       ant.vx = ant.vy = 0;
       ant.sprinting = false;
+      ant.dashing = false;
+      ant.dashDistLeft = 0;
       if (ant.carrying) {
         ant.carrying = false;
         ant.carryingType = null;
@@ -672,6 +727,8 @@ export class Game {
     ant.stunnedUntil = this.now + stunDur;
     ant.vx = ant.vy = 0;
     ant.sprinting = false;
+    ant.dashing = false;
+    ant.dashDistLeft = 0;
     src.warnUntil = this.now + warnDur;
     this.events.push({ t: 'fake_food_warn', x: src.x, y: src.y, antId: ant.id, playerId: ant.playerId });
     return true;
@@ -735,6 +792,8 @@ export class Game {
       if (this._isStunned(ant)) {
         ant.vx = ant.vy = 0;
         ant.sprinting = false;
+        ant.dashing = false;
+        ant.dashDistLeft = 0;
         continue;
       }
       // 真人隐藏者取食：真/假食物互斥处理，避免 _processFoodAction 每帧清零 pickupProgress
@@ -766,6 +825,19 @@ export class Game {
   }
 
   _updateHider(ant, dt) {
+    // 突进中：沿锁定方向高速位移，忽略常规移动输入
+    if (ant.dashing) {
+      const step = Math.min(ant.dashSpeed * dt, ant.dashDistLeft);
+      ant.x += ant.dashDx * step;
+      ant.y += ant.dashDy * step;
+      ant.dashDistLeft -= step;
+      ant.x = Math.max(20, Math.min(CONFIG.WORLD_W - 20, ant.x));
+      ant.y = Math.max(20, Math.min(CONFIG.WORLD_H - 20, ant.y));
+      if (ant.dashDistLeft <= 0) ant.dashing = false;
+      depositTrail(ant, dt, this.phero);
+      return;
+    }
+
     const speedBase = this.devCfg.AI_SPEED_BASE ?? CONFIG.AI_SPEED_BASE;
     const sprintMul = ant.sprinting ? (this.devCfg.AI_SPEED?.sprint ?? CONFIG.AI_SPEED.sprint) : 1.0;
     const carryMul = this._carryMulFor(ant);
@@ -788,6 +860,8 @@ export class Game {
     ant.y = spawn.y;
     ant.vx = ant.vy = 0;
     ant.sprinting = false;
+    ant.dashing = false;
+    ant.dashDistLeft = 0;
     ant.carrying = false;
     ant.carryingType = null;
     ant.pickupProgress = 0;
@@ -958,6 +1032,9 @@ export class Game {
         : this._hiderScoreList().map(({ color, ...rest }) => rest),
       hiderQuota: this.hiderQuota,
       phero: pheroSnap,  // null 时客户端复用上一帧缓存
+      ...(role === ROLE.HIDER && viewerAnt && !viewerAnt.bot && {
+        hiderToolCooldownLeft: { dash: this._hiderDashCdLeft(viewerAnt) },
+      }),
       ...(role === ROLE.SEEKER && (() => {
         const myState = this.seekerStates.get(viewerPid);
         return {
@@ -1091,6 +1168,9 @@ export class Game {
     }
     if (params.SNIFF_RADIUS !== undefined) {
       this.devCfg.SNIFF_RADIUS = Math.max(50, Math.min(300, +params.SNIFF_RADIUS));
+    }
+    if (params.HIDER_DASH_DISTANCE !== undefined) {
+      this.devCfg.HIDER_DASH_DISTANCE = Math.max(40, Math.min(400, +params.HIDER_DASH_DISTANCE));
     }
     if (params.TOOL_CD) {
       this.devCfg.TOOL_CD = { ...this.devCfg.TOOL_CD };

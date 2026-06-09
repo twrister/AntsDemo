@@ -199,6 +199,12 @@ function applyDevToolsFromServer(m) {
       world.tools[key] = { ...world.tools[key], ...def };
     }
   }
+  if (m.hiderTools) {
+    world.hiderTools = world.hiderTools || {};
+    for (const [key, def] of Object.entries(m.hiderTools)) {
+      world.hiderTools[key] = { ...world.hiderTools[key], ...def };
+    }
+  }
   if (m.noToolCd !== undefined) {
     world.noToolCd = !!m.noToolCd;
     if (controller?.noToolCd !== undefined) controller.noToolCd = !!m.noToolCd;
@@ -705,9 +711,12 @@ net.on('start', (m) => {
   $('roleTag').className = 'hud-item ' + (role === ROLE.SEEKER ? 'role-seeker' : 'role-hider');
   if (role === ROLE.SEEKER) {
     controller = new SeekerController({ canvas, input, net, world });
+    $('seekerHint').classList.remove('hidden');
+    $('hiderHint').classList.add('hidden');
   } else {
     controller = new HiderController({ canvas, input, net, world, antId: m.antId });
-    $('toolbar').classList.add('hidden');
+    $('seekerHint').classList.add('hidden');
+    $('hiderHint').classList.remove('hidden');
   }
   $('hiderScorePanel').classList.remove('hidden');
   running = true;

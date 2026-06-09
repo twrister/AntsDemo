@@ -219,7 +219,7 @@ export class Room {
     for (const p of this.players.values()) p.ready = false;
   }
 
-  /** 下发客户端工具配置，合并全局/运行时 devCfg 覆盖 */
+  /** 下发客户端搜寻者工具配置，合并全局/运行时 devCfg 覆盖 */
   _toolsForClient(game) {
     const tools = JSON.parse(JSON.stringify(CONFIG.TOOLS));
     const cfg = game?.devCfg;
@@ -233,6 +233,16 @@ export class Room {
     if (tools.sniff) tools.sniff.beamSpeed = beamSpeed;
     if (cfg?.SNIFF_RADIUS !== undefined && tools.sniff) {
       tools.sniff.radius = cfg.SNIFF_RADIUS;
+    }
+    return tools;
+  }
+
+  /** 下发客户端隐藏者工具配置，合并运行时 devCfg 覆盖 */
+  _hiderToolsForClient(game) {
+    const tools = JSON.parse(JSON.stringify(CONFIG.HIDER_TOOLS));
+    const cfg = game?.devCfg;
+    if (cfg?.HIDER_DASH_DISTANCE !== undefined && tools.dash) {
+      tools.dash.distance = cfg.HIDER_DASH_DISTANCE;
     }
     return tools;
   }
@@ -257,6 +267,7 @@ export class Room {
     const payload = {
       type: S2C.DEV_TOOLS,
       tools: this._toolsForClient(this.game),
+      hiderTools: this._hiderToolsForClient(this.game),
       markCooldown: this._markCooldownForClient(this.game),
       noToolCd: this.game.noToolCd,
     };
@@ -289,6 +300,7 @@ export class Room {
           hiderViewWidth: CONFIG.HIDER_VIEW_WIDTH,
           hiderViewHeight: CONFIG.HIDER_VIEW_HEIGHT,
           tools: this._toolsForClient(this.game),
+          hiderTools: this._hiderToolsForClient(this.game),
           markCooldown: this._markCooldownForClient(this.game),
           debugMode: !!opts.debugMode,
           noToolCd: this.game.noToolCd,
@@ -394,6 +406,7 @@ export class Room {
       case 'restart': if (this.state === 'ended') this.restart(); break;
       case 'move': if (g && p.role === ROLE.HIDER) g.setHiderMove(id, msg.dx || 0, msg.dy || 0); break;
       case 'sprint': if (g && p.role === ROLE.HIDER) g.setHiderSprint(id, !!msg.active); break;
+      case 'hider_dash': if (g && p.role === ROLE.HIDER) g.useHiderDash(id); break;
       case 'mark': if (g && p.role === ROLE.SEEKER) g.markAnt(id, msg.antId); break;
       case 'tool_beam': if (g && p.role === ROLE.SEEKER) g.setToolBeam(id, msg.tool, msg.x, msg.y, !!msg.active); break;
       case 'place_fake_food': if (g && p.role === ROLE.SEEKER) g.placeFakeFood(id, msg.x, msg.y); break;

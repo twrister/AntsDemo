@@ -16,6 +16,8 @@ export const C2S = {
   JOIN:         'join',         // 旧版兼容，已替换为 CREATE_ROOM/JOIN_ROOM
   READY:        'ready',        // 切换准备状态
   MOVE:         'move',         // 隐藏者移动 { dx, dy }
+  SPRINT:       'sprint',       // 隐藏者冲刺 { active }
+  HIDER_DASH:   'hider_dash',   // 隐藏者突进技能 {}
   PICKUP:       'pickup',
   MARK:         'mark',         // 搜寻者标记蚂蚁 { antId }（多名搜寻者各自独立冷却）
   TOOL_BEAM:    'tool_beam',    // 搜寻者持续照射 { tool, x, y, active }（按连接玩家路由）

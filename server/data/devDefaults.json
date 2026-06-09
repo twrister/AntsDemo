@@ -4,7 +4,7 @@
   "AI_TURN_SMOOTH": 0.3,
   "AI_SOCIAL_CHANCE": 0.05,
   "AI_SPEED": {
-    "sprint": 2.25,
+    "sprint": 2,
     "carry": 0.8,
     "carryRich": 0.6
   },

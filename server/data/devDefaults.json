@@ -1,0 +1,22 @@
+{
+  "AI_ANT_COUNT": 30,
+  "AI_SPEED_BASE": 100,
+  "AI_TURN_SMOOTH": 0.3,
+  "AI_SOCIAL_CHANCE": 0.05,
+  "AI_SPEED": {
+    "sprint": 2.25,
+    "carry": 0.8,
+    "carryRich": 0.6
+  },
+  "FOOD_COUNT": 8,
+  "FOOD_CAPACITY": 30,
+  "BEAM_SPEED": 1000,
+  "SNIFF_RADIUS": 150,
+  "TOOL_CD": {
+    "panic": 10,
+    "sniff": 12,
+    "fakeFood": 20
+  },
+  "MARK_COOLDOWN": 2,
+  "DEBUG_NO_CD": false
+}

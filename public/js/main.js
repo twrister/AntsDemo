@@ -72,6 +72,9 @@ const DEV_DEFAULTS = {
 
 const DEV_STORAGE_KEY = 'antsDemo_devCfg';
 
+/** 服务端保存的自定义默认值（所有版本/端口共用） */
+let userDevDefaults = {};
+
 function readToolCdFromDom() {
   const toolCd = {};
   for (const key of Object.keys(TOOL_CD_META)) {
@@ -108,9 +111,38 @@ function applyMarkCooldownToWorld(markCooldown) {
   if (world) world.markCooldown = normalizeMarkCooldown(markCooldown);
 }
 
-function persistDevConfig() {
-  if (!DEBUG_MODE) return;
-  const cfg = {
+/** 合并内置与用户自定义默认值 */
+function getEffectiveDevDefaults() {
+  return {
+    ...DEV_DEFAULTS,
+    ...userDevDefaults,
+    AI_SPEED: { ...DEV_DEFAULTS.AI_SPEED, ...(userDevDefaults.AI_SPEED || {}) },
+    TOOL_CD: { ...DEV_DEFAULTS.TOOL_CD, ...(userDevDefaults.TOOL_CD || {}) },
+    MARK_COOLDOWN: normalizeMarkCooldown(
+      userDevDefaults.MARK_COOLDOWN ?? DEV_DEFAULTS.MARK_COOLDOWN,
+    ),
+    BEAM_SPEED: normalizeBeamSpeed(userDevDefaults.BEAM_SPEED ?? DEV_DEFAULTS.BEAM_SPEED),
+  };
+}
+
+/** 归一化调参对象（含范围钳制） */
+function normalizeDevConfig(raw) {
+  const base = getEffectiveDevDefaults();
+  const c = {
+    ...base,
+    ...raw,
+    AI_SPEED: { ...base.AI_SPEED, ...(raw.AI_SPEED || {}) },
+    TOOL_CD: { ...base.TOOL_CD, ...(raw.TOOL_CD || {}) },
+    MARK_COOLDOWN: normalizeMarkCooldown(raw.MARK_COOLDOWN ?? base.MARK_COOLDOWN),
+    BEAM_SPEED: normalizeBeamSpeed(raw.BEAM_SPEED ?? base.BEAM_SPEED),
+  };
+  c.AI_ANT_COUNT = Math.max(AI_ANT_COUNT_MIN, Math.min(AI_ANT_COUNT_MAX, c.AI_ANT_COUNT));
+  return c;
+}
+
+/** 从 DOM 读取当前调参 */
+function readDevConfigFromDom() {
+  return {
     AI_ANT_COUNT: parseInt($('devAntCount').value, 10),
     AI_SPEED_BASE: parseFloat($('devSpeedBase').value),
     AI_TURN_SMOOTH: parseFloat($('devTurnSmooth').value),
@@ -128,7 +160,11 @@ function persistDevConfig() {
     MARK_COOLDOWN: readMarkCooldownFromDom(),
     DEBUG_NO_CD: $('devNoCdCheck').checked,
   };
-  localStorage.setItem(DEV_STORAGE_KEY, JSON.stringify(cfg));
+}
+
+function persistDevConfig() {
+  if (!DEBUG_MODE) return;
+  localStorage.setItem(DEV_STORAGE_KEY, JSON.stringify(readDevConfigFromDom()));
 }
 
 function applyBeamSpeedToWorld(beamSpeed) {
@@ -165,24 +201,12 @@ function applyDevToolsFromServer(m) {
   if (m.markCooldown !== undefined) applyMarkCooldownToWorld(m.markCooldown);
 }
 
-function restoreDevConfig() {
-  if (!DEBUG_MODE) return;
-  let saved = {};
-  try { saved = JSON.parse(localStorage.getItem(DEV_STORAGE_KEY) || '{}'); } catch (_) {}
-  const c = {
-    ...DEV_DEFAULTS,
-    ...saved,
-    AI_SPEED: { ...DEV_DEFAULTS.AI_SPEED, ...(saved.AI_SPEED || {}) },
-    TOOL_CD: { ...DEV_DEFAULTS.TOOL_CD, ...(saved.TOOL_CD || {}) },
-    MARK_COOLDOWN: normalizeMarkCooldown(saved.MARK_COOLDOWN ?? DEV_DEFAULTS.MARK_COOLDOWN),
-    BEAM_SPEED: normalizeBeamSpeed(saved.BEAM_SPEED ?? DEV_DEFAULTS.BEAM_SPEED),
-  };
-  const antCount = Math.max(AI_ANT_COUNT_MIN, Math.min(AI_ANT_COUNT_MAX, c.AI_ANT_COUNT));
-
+/** 将调参写入开发者面板 DOM 并同步到本地 world */
+function applyDevConfigToDom(c) {
   $('devAntCount').min = AI_ANT_COUNT_MIN;
   $('devAntCount').max = AI_ANT_COUNT_MAX;
-  $('devAntCount').value = antCount;
-  $('devAntCountVal').textContent = antCount;
+  $('devAntCount').value = c.AI_ANT_COUNT;
+  $('devAntCountVal').textContent = c.AI_ANT_COUNT;
   $('devSpeedBase').value = c.AI_SPEED_BASE;
   $('devSpeedBaseVal').textContent = c.AI_SPEED_BASE;
   $('devTurnSmooth').value = c.AI_TURN_SMOOTH;
@@ -220,6 +244,40 @@ function restoreDevConfig() {
   applySniffRadiusToWorld(c.SNIFF_RADIUS);
   applyToolCdToWorld(c.TOOL_CD);
   applyMarkCooldownToWorld(c.MARK_COOLDOWN);
+}
+
+function restoreDevConfig() {
+  if (!DEBUG_MODE) return;
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(DEV_STORAGE_KEY) || '{}'); } catch (_) {}
+  applyDevConfigToDom(normalizeDevConfig(saved));
+}
+
+/** 从服务端拉取共用默认值 */
+async function fetchUserDevDefaults() {
+  try {
+    const res = await fetch('/api/dev-defaults');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data && typeof data === 'object') userDevDefaults = data;
+  } catch (_) {}
+}
+
+/** 将当前调参保存为服务端共用默认值 */
+async function saveUserDevDefaults() {
+  const cfg = readDevConfigFromDom();
+  try {
+    const res = await fetch('/api/dev-defaults', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(cfg),
+    });
+    if (!res.ok) throw new Error('save failed');
+    userDevDefaults = await res.json();
+    toast('已保存为默认值', 'good');
+  } catch {
+    toast('保存默认值失败', 'bad');
+  }
 }
 
 function sendDevConfig() {
@@ -283,7 +341,7 @@ function buildDevToolCdSliders() {
 
 if (DEBUG_MODE) {
   buildDevToolCdSliders();
-  restoreDevConfig();
+  fetchUserDevDefaults().then(() => restoreDevConfig());
   bindSlider('devAntCount', 'devAntCountVal', 0);
   bindSlider('devSpeedBase', 'devSpeedBaseVal', 0);
   bindSlider('devTurnSmooth', 'devTurnSmoothVal', 2);
@@ -297,38 +355,10 @@ if (DEBUG_MODE) {
   bindSlider('devSniffRadius', 'devSniffRadiusVal', 0);
   bindSlider('devMarkCd', 'devMarkCdVal', 0);
 
+  $('devSaveDefaults').addEventListener('click', () => saveUserDevDefaults());
   $('devReset').addEventListener('click', () => {
     localStorage.removeItem(DEV_STORAGE_KEY);
-    $('devAntCount').value = DEV_DEFAULTS.AI_ANT_COUNT;
-    $('devAntCountVal').textContent = DEV_DEFAULTS.AI_ANT_COUNT;
-    $('devSpeedBase').value = DEV_DEFAULTS.AI_SPEED_BASE;
-    $('devSpeedBaseVal').textContent = DEV_DEFAULTS.AI_SPEED_BASE;
-    $('devTurnSmooth').value = DEV_DEFAULTS.AI_TURN_SMOOTH;
-    $('devTurnSmoothVal').textContent = DEV_DEFAULTS.AI_TURN_SMOOTH.toFixed(2);
-    $('devSocialChance').value = DEV_DEFAULTS.AI_SOCIAL_CHANCE;
-    $('devSocialChanceVal').textContent = DEV_DEFAULTS.AI_SOCIAL_CHANCE.toFixed(3);
-    $('devSpeedSprint').value = DEV_DEFAULTS.AI_SPEED.sprint;
-    $('devSpeedSprintVal').textContent = DEV_DEFAULTS.AI_SPEED.sprint.toFixed(2);
-    $('devSpeedCarry').value = DEV_DEFAULTS.AI_SPEED.carry;
-    $('devSpeedCarryVal').textContent = DEV_DEFAULTS.AI_SPEED.carry.toFixed(2);
-    $('devSpeedCarryRich').value = DEV_DEFAULTS.AI_SPEED.carryRich;
-    $('devSpeedCarryRichVal').textContent = DEV_DEFAULTS.AI_SPEED.carryRich.toFixed(2);
-    $('devFoodCount').value = DEV_DEFAULTS.FOOD_COUNT;
-    $('devFoodCountVal').textContent = DEV_DEFAULTS.FOOD_COUNT;
-    $('devFoodCapacity').value = DEV_DEFAULTS.FOOD_CAPACITY;
-    $('devFoodCapacityVal').textContent = DEV_DEFAULTS.FOOD_CAPACITY;
-    $('devBeamSpeed').value = DEV_DEFAULTS.BEAM_SPEED;
-    $('devBeamSpeedVal').textContent = DEV_DEFAULTS.BEAM_SPEED;
-    $('devSniffRadius').value = DEV_DEFAULTS.SNIFF_RADIUS;
-    $('devSniffRadiusVal').textContent = DEV_DEFAULTS.SNIFF_RADIUS;
-    for (const [key, meta] of Object.entries(TOOL_CD_META)) {
-      const cd = DEV_DEFAULTS.TOOL_CD[key] ?? meta.default;
-      $(`devToolCd_${key}`).value = cd;
-      $(`devToolCd_${key}Val`).textContent = cd;
-    }
-    $('devMarkCd').value = DEV_DEFAULTS.MARK_COOLDOWN;
-    $('devMarkCdVal').textContent = DEV_DEFAULTS.MARK_COOLDOWN;
-    $('devNoCdCheck').checked = DEV_DEFAULTS.DEBUG_NO_CD;
+    applyDevConfigToDom(getEffectiveDevDefaults());
     sendDevConfig();
   });
 

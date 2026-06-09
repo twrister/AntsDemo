@@ -1,6 +1,11 @@
 // 服务器入口：3000 正式服 + 3001 本地调试服（单机调试 / DEV 工具）。
 import { createServer } from './createServer.js';
 import { setGlobalDevConfig } from './globalDevConfig.js';
+import { loadDevDefaultsFromDisk, getDevDefaults } from './devDefaultsStore.js';
+
+loadDevDefaultsFromDisk();
+const savedDefaults = getDevDefaults();
+if (savedDefaults) setGlobalDevConfig(savedDefaults);
 
 const MAIN_PORT = Number(process.env.PORT) || 3000;
 const DEBUG_PORT = Number(process.env.DEBUG_PORT) || 3001;

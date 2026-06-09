@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { WebSocketServer } from 'ws';
 import { Room } from './Room.js';
 import { S2C } from './protocol.js';
+import { getDevDefaults, setDevDefaults } from './devDefaultsStore.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, '..', 'public');
@@ -107,9 +108,46 @@ export function createServer(opts) {
     }
   }
 
-  const server = http.createServer((req, res) => {
+  /** 读取 POST 请求体 */
+  function readBody(req) {
+    return new Promise((resolve, reject) => {
+      let data = '';
+      req.on('data', (chunk) => { data += chunk; });
+      req.on('end', () => resolve(data));
+      req.on('error', reject);
+    });
+  }
+
+  const server = http.createServer(async (req, res) => {
     let urlPath = decodeURIComponent(req.url.split('?')[0]);
     if (urlPath === '/') urlPath = `/${defaultPage}`;
+
+    // 开发者工具自定义默认值 API（GET 双端口可读，POST 仅调试端口）
+    if (urlPath === '/api/dev-defaults') {
+      if (req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify(getDevDefaults() || {}));
+        return;
+      }
+      if (req.method === 'POST') {
+        if (!allowDebug) { res.writeHead(403); res.end('Forbidden'); return; }
+        try {
+          const raw = await readBody(req);
+          const cfg = JSON.parse(raw || '{}');
+          const saved = setDevDefaults(cfg);
+          res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify(saved));
+        } catch {
+          res.writeHead(400);
+          res.end('Bad Request');
+        }
+        return;
+      }
+      res.writeHead(405);
+      res.end('Method Not Allowed');
+      return;
+    }
+
     const filePath = path.join(PUBLIC, path.normalize(urlPath.slice(1)));
     if (!filePath.startsWith(PUBLIC)) { res.writeHead(403); res.end('Forbidden'); return; }
     fs.readFile(filePath, (err, data) => {

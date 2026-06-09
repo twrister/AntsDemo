@@ -27,6 +27,7 @@ export class Room {
     this.loop = null;
     this.matchDurationMin = CONFIG.MATCH_DURATION / 60; // 对局时长 (分钟)，房主可改
     this.hiderFoodQuota = CONFIG.HIDER_FOOD_QUOTA;     // 获胜所需食物数，房主可改
+    this.aiAntCount = CONFIG.AI_ANT_COUNT;             // 地图 AI 蚂蚁数量，房主可改
   }
 
   get seeker() { return [...this.players.values()].find(p => p.role === ROLE.SEEKER); }
@@ -47,6 +48,7 @@ export class Room {
       hostName: host ? host.name : '',
       matchMinutes: this.matchDurationMin,
       hiderFoodQuota: this.hiderFoodQuota,
+      aiAntCount: this.aiAntCount,
     };
   }
 
@@ -135,6 +137,14 @@ export class Room {
   setHiderFoodQuota(id, quota) {
     if (this.state !== 'lobby' || id !== this.hostId) return;
     this.hiderFoodQuota = CONFIG.hiderFoodQuota(quota);
+    for (const p of this.players.values()) p.ready = false;
+    this.broadcastLobby();
+  }
+
+  /** 房主设置地图 AI 蚂蚁数量；变更后所有人需重新准备 */
+  setAiAntCount(id, count) {
+    if (this.state !== 'lobby' || id !== this.hostId) return;
+    this.aiAntCount = CONFIG.aiAntCount(count);
     for (const p of this.players.values()) p.ready = false;
     this.broadcastLobby();
   }
@@ -257,13 +267,14 @@ export class Room {
     this.state = 'playing';
     const matchDuration = CONFIG.matchDurationSeconds(this.matchDurationMin);
     const hiderFoodQuota = this.hiderFoodQuota;
+    const aiAntCount = this.aiAntCount;
     const globalCfg = getGlobalDevConfig();
     // 全局 DEBUG_NO_CD 优先；调试单机默认无工具 CD（与 README 调试模式一致）
     const noToolCd = globalCfg?.DEBUG_NO_CD !== undefined
       ? !!globalCfg.DEBUG_NO_CD
       : (opts.debugMode ? true : !!opts.noToolCd);
     const seekerIds = this.seekers.map(p => p.id);
-    this.game = new Game(hiders, { ...opts, matchDuration, hiderFoodQuota, noToolCd, seekerIds });
+    this.game = new Game(hiders, { ...opts, matchDuration, hiderFoodQuota, aiAntCount, noToolCd, seekerIds });
     if (globalCfg) this.game.setDevConfig(globalCfg);
 
     for (const p of this.players.values()) {
@@ -361,6 +372,7 @@ export class Room {
       canStartReason: cs.reason,
       matchDurationMin: this.matchDurationMin,
       hiderFoodQuota: this.hiderFoodQuota,
+      aiAntCount: this.aiAntCount,
     });
   }
 
@@ -375,6 +387,7 @@ export class Room {
       case 'start_game': this.startGame(id); break;
       case 'set_match_duration': this.setMatchDuration(id, msg.minutes); break;
       case 'set_hider_food_quota': this.setHiderFoodQuota(id, msg.quota); break;
+      case 'set_ai_ant_count': this.setAiAntCount(id, msg.count); break;
       case 'solo_start':
         if (this.state === 'lobby' || this.state === 'ended') this.startSolo(id, msg.role);
         break;

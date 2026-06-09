@@ -29,6 +29,7 @@ export class Game {
   /** @param opts.noToolCd 搜寻者工具无 CD（标记冷却仍生效） */
   /** @param opts.matchDuration 本局时长 (秒) */
   /** @param opts.hiderFoodQuota 每位隐藏者获胜所需食物数 */
+  /** @param opts.aiAntCount 地图 AI 蚂蚁数量 */
   constructor(hiderPlayers, opts = {}) {
     this.now = 0;
     this.matchDuration = opts.matchDuration ?? CONFIG.MATCH_DURATION;
@@ -55,6 +56,7 @@ export class Game {
 
     this.hiderCount = hiderPlayers.length;
     this.hiderQuota = opts.hiderFoodQuota ?? CONFIG.HIDER_FOOD_QUOTA;
+    this.aiAntCount = opts.aiAntCount ?? CONFIG.AI_ANT_COUNT;
     this._botLabelSeq = 0;
     this.over = false;
     this.winner = null;
@@ -110,7 +112,7 @@ export class Game {
     this._spawnFoodSources(CONFIG.FOOD.RICH.count, 'rich');
 
     // 生成 AI 蚂蚁
-    for (let i = 0; i < CONFIG.AI_ANT_COUNT; i++) {
+    for (let i = 0; i < this.aiAntCount; i++) {
       this.ants.push(this._makeAnt(this._nextAntId++, false, null));
     }
 

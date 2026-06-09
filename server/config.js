@@ -16,7 +16,16 @@ export const CONFIG = {
     const clamped = Math.max(this.MATCH_DURATION_MIN_MINUTES, Math.min(this.MATCH_DURATION_MAX_MINUTES, m));
     return clamped * 60;
   },
-  AI_ANT_COUNT: 30,         // 地图 AI 蚂蚁数量
+  AI_ANT_COUNT: 30,         // 地图 AI 蚂蚁数量（默认；房主可在房间中配置）
+  AI_ANT_COUNT_MIN: 5,
+  AI_ANT_COUNT_MAX: 100,
+  AI_ANT_COUNT_STEP: 5,
+  /** 将 AI 蚂蚁数量限制在合法范围并按步长取整 */
+  aiAntCount(count) {
+    const n = Math.round(Number(count) || 0);
+    const clamped = Math.max(this.AI_ANT_COUNT_MIN, Math.min(this.AI_ANT_COUNT_MAX, n));
+    return Math.round(clamped / this.AI_ANT_COUNT_STEP) * this.AI_ANT_COUNT_STEP;
+  },
   MAX_PLAYERS: 10,          // 单房间最多联机人数
   MIN_HIDERS: 1,            // 最少隐藏者(不足用 AI 占位)
   MAX_HIDERS: 9,            // 单局最多隐藏者人数

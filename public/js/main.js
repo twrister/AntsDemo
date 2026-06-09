@@ -33,10 +33,15 @@ const HIDER_FOOD_QUOTA_MIN = 1;
 const HIDER_FOOD_QUOTA_MAX = 30;
 const HIDER_FOOD_QUOTA_DEFAULT = 10;
 
+const AI_ANT_COUNT_MIN = 5;
+const AI_ANT_COUNT_MAX = 100;
+const AI_ANT_COUNT_STEP = 5;
+const AI_ANT_COUNT_DEFAULT = 30;
+
 // ---- 开发者工具（仅调试端口） ----
 
-const AI_ANT_COUNT_MIN = 10;
-const AI_ANT_COUNT_MAX = 200;
+const DEV_AI_ANT_COUNT_MIN = 10;
+const DEV_AI_ANT_COUNT_MAX = 200;
 
 /** 各工具 CD 调试滑条元数据（与 server/config.js TOOLS 键名一致） */
 const TOOL_CD_META = {
@@ -136,7 +141,7 @@ function normalizeDevConfig(raw) {
     MARK_COOLDOWN: normalizeMarkCooldown(raw.MARK_COOLDOWN ?? base.MARK_COOLDOWN),
     BEAM_SPEED: normalizeBeamSpeed(raw.BEAM_SPEED ?? base.BEAM_SPEED),
   };
-  c.AI_ANT_COUNT = Math.max(AI_ANT_COUNT_MIN, Math.min(AI_ANT_COUNT_MAX, c.AI_ANT_COUNT));
+  c.AI_ANT_COUNT = Math.max(DEV_AI_ANT_COUNT_MIN, Math.min(DEV_AI_ANT_COUNT_MAX, c.AI_ANT_COUNT));
   return c;
 }
 
@@ -203,8 +208,8 @@ function applyDevToolsFromServer(m) {
 
 /** 将调参写入开发者面板 DOM 并同步到本地 world */
 function applyDevConfigToDom(c) {
-  $('devAntCount').min = AI_ANT_COUNT_MIN;
-  $('devAntCount').max = AI_ANT_COUNT_MAX;
+  $('devAntCount').min = DEV_AI_ANT_COUNT_MIN;
+  $('devAntCount').max = DEV_AI_ANT_COUNT_MAX;
   $('devAntCount').value = c.AI_ANT_COUNT;
   $('devAntCountVal').textContent = c.AI_ANT_COUNT;
   $('devSpeedBase').value = c.AI_SPEED_BASE;
@@ -470,6 +475,42 @@ $('hiderFoodQuotaSelect')?.addEventListener('change', () => {
   net.send({ type: 'set_hider_food_quota', quota });
 });
 
+// ---- AI 蚂蚁数量（房主可配置 5~100，步长 5，默认 30） ----
+
+let syncingAiAntCount = false;
+
+/** 初始化 AI 蚂蚁数量下拉选项 */
+function initAiAntCountSelect() {
+  const sel = $('aiAntCountSelect');
+  if (!sel || sel.options.length > 0) return;
+  for (let n = AI_ANT_COUNT_MIN; n <= AI_ANT_COUNT_MAX; n += AI_ANT_COUNT_STEP) {
+    const opt = document.createElement('option');
+    opt.value = String(n);
+    opt.textContent = `${n} 只`;
+    sel.appendChild(opt);
+  }
+  sel.value = String(AI_ANT_COUNT_DEFAULT);
+}
+
+/** 根据大厅状态更新 AI 蚂蚁数量控件 */
+function updateAiAntCountUi(count, isHost) {
+  const sel = $('aiAntCountSelect');
+  if (!sel) return;
+  const c = Math.max(AI_ANT_COUNT_MIN, Math.min(AI_ANT_COUNT_MAX, count || AI_ANT_COUNT_DEFAULT));
+  const stepped = Math.round(c / AI_ANT_COUNT_STEP) * AI_ANT_COUNT_STEP;
+  syncingAiAntCount = true;
+  sel.value = String(stepped);
+  syncingAiAntCount = false;
+  sel.disabled = !isHost;
+}
+
+initAiAntCountSelect();
+$('aiAntCountSelect')?.addEventListener('change', () => {
+  if (syncingAiAntCount) return;
+  const count = parseInt($('aiAntCountSelect').value, 10);
+  net.send({ type: 'set_ai_ant_count', count });
+});
+
 // ---- 连接 ----
 
 async function ensureConnected() {
@@ -514,8 +555,9 @@ function renderRoomList(rooms) {
     const stateClass = r.state === 'playing' ? 'playing' : '';
     const durTag = r.matchMinutes ? ` · ${r.matchMinutes}分` : '';
     const quotaTag = r.hiderFoodQuota ? ` · ${r.hiderFoodQuota}食` : '';
+    const antTag = r.aiAntCount ? ` · ${r.aiAntCount}蚁` : '';
     item.innerHTML = `
-      <span class="room-item-name col-name">${escapeHtml(r.name)}${durTag}${quotaTag}</span>
+      <span class="room-item-name col-name">${escapeHtml(r.name)}${durTag}${quotaTag}${antTag}</span>
       <span class="col-host">${escapeHtml(r.hostName)}</span>
       <span class="col-count">${r.count}</span>
       <span class="room-item-state col-state ${stateClass}">${stateText}</span>
@@ -645,6 +687,7 @@ net.on('lobby', (m) => {
   $('canStartHint').textContent = isHost && !m.canStart ? m.canStartReason : '';
   updateMatchDurationUi(m.matchDurationMin, isHost);
   updateHiderFoodQuotaUi(m.hiderFoodQuota, isHost);
+  updateAiAntCountUi(m.aiAntCount, isHost);
 });
 
 net.on('dev_tools', applyDevToolsFromServer);

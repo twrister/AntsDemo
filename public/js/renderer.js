@@ -508,7 +508,7 @@ export class Renderer {
     const sat = Math.min(58, 45 + satBoost);
     let body = `hsl(${baseHue}, ${sat}%, ${light}%)`;
     if (ant.marked) body = illum > 0.2 ? '#777' : '#555';
-    // 隐藏者方：己方与同队隐藏者显示标识色；搜寻者仅对已获证隐藏者显示真色
+    // 隐藏者方：己方与同队隐藏者显示标识色；搜寻者仅对已获胜隐藏者显示真色
     if (ant.hiderColor && (opts.role === ROLE.HIDER || ant.verified)) body = ant.hiderColor;
     // 腿
     const legLight = Math.max(12, light - 8 + illum * 6);
@@ -563,6 +563,16 @@ export class Renderer {
 
     ctx.restore();
 
+    // 假食物定身：短暂黄色虚线圈
+    if (ant.stunned) {
+      ctx.beginPath();
+      ctx.arc(ant.x, ant.y, 16, 0, Math.PI * 2);
+      ctx.strokeStyle = '#e0a93b';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 4]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
     // 被标记冻结 + 复活倒计时
     if (ant.marked) {
       ctx.strokeStyle = '#d6543c'; ctx.lineWidth = 2;

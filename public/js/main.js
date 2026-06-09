@@ -751,6 +751,14 @@ function formatLivesHearts(lives, eliminated = false, max = 3) {
   return html + '</span>';
 }
 
+/** 格式化胜利用时（对局内已用秒数 → M:SS） */
+function formatVictoryTime(sec) {
+  const total = Math.max(0, Math.floor(sec));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 /** 渲染左上角各隐藏者获证进度 */
 function updateHiderScorePanel(snap) {
   const panel = $('hiderScorePanel');
@@ -766,7 +774,10 @@ function updateHiderScorePanel(snap) {
       ? `<span class="hider-color-dot" style="background:${h.color}"></span>`
       : '';
     const livesHearts = h.lives != null ? formatLivesHearts(h.lives, h.eliminated) : '';
-    html += `<div class="${cls}">${dot}<span class="label">${escapeHtml(h.label)}</span>${livesHearts}<span class="progress">${h.score}/${h.quota}</span></div>`;
+    const victoryTime = h.completeTime != null
+      ? `<span class="victory-time">${formatVictoryTime(h.completeTime)}</span>`
+      : '';
+    html += `<div class="${cls}">${dot}<span class="label">${escapeHtml(h.label)}${victoryTime}</span>${livesHearts}<span class="progress">${h.score}/${h.quota}</span></div>`;
   }
   panel.innerHTML = html;
 }
@@ -797,7 +808,9 @@ function renderEndStats(m) {
       <div class="end-hider-list">`;
     for (const h of m.hiderScores) {
       const cls = h.verified ? 'end-hider-row verified' : (h.eliminated ? 'end-hider-row eliminated' : 'end-hider-row');
-      const status = h.verified ? '已获证' : (h.eliminated ? '已淘汰' : '进行中');
+      const status = h.completeTime != null
+        ? formatVictoryTime(h.completeTime)
+        : (h.verified ? '已获胜' : (h.eliminated ? '已淘汰' : '进行中'));
       const livesHearts = h.lives != null ? formatLivesHearts(h.lives, h.eliminated) : '';
       const dot = h.color
         ? `<span class="hider-color-dot" style="background:${h.color}"></span>`
@@ -872,8 +885,8 @@ function handleEvent(e) {
       break;
     case 'hider_verified':
       toast(role === ROLE.SEEKER
-        ? `${e.label || '隐藏者'} 已获证，外观现出真色且不可标记`
-        : `${e.label || '隐藏者'} 已获证！`, role === ROLE.SEEKER ? 'bad' : 'good');
+        ? `${e.label || '隐藏者'} 已获胜，外观现出真色且不可标记`
+        : `${e.label || '隐藏者'} 已获胜！`, role === ROLE.SEEKER ? 'bad' : 'good');
       break;
     case 'tool':       if (role === ROLE.SEEKER) toast('使用了工具', 'good'); break;
     case 'fake_food_warn':

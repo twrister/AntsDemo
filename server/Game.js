@@ -128,6 +128,7 @@ export class Game {
       ant.hiderLabel = h.name || (h.bot ? `AI-${++this._botLabelSeq}` : '隐藏者');
       ant.foodScore = 0;
       ant.verified = false;
+      ant.completeTime = null; // 达成食物配额时的对局用时（秒）
       if (ant.bot) initAI(ant);
       this.ants.push(ant);
     }
@@ -318,6 +319,7 @@ export class Game {
       carrying: false,
       carryingType: null,
       markedUntil: 0,   // 被标中冻结截止时刻；0 表示正常
+      stunnedUntil: 0,  // 吃到假食物后的定身截止时刻；0 表示正常
       lives: isHider ? CONFIG.HIDER_LIVES : 0,
       eliminated: false, // 生命归零或玩家离场等永久出局
       vx: 0, vy: 0,
@@ -335,6 +337,11 @@ export class Game {
     return ant.markedUntil > this.now;
   }
 
+  /** 蚂蚁是否处于假食物定身期（不可移动、不可取食） */
+  _isStunned(ant) {
+    return ant.stunnedUntil > this.now;
+  }
+
   /** 隐藏者是否仍在对局中（未永久出局） */
   _isActiveHider(ant) {
     return ant.isHider && !ant.eliminated;
@@ -343,7 +350,7 @@ export class Game {
   // ---------- 玩家输入 ----------
   setHiderMove(pid, dx, dy) {
     const ant = this.ants.find(a => a.playerId === pid);
-    if (!ant || this._isMarked(ant) || ant.eliminated) return;
+    if (!ant || this._isMarked(ant) || this._isStunned(ant) || ant.eliminated) return;
     const len = Math.hypot(dx, dy) || 1;
     ant.vx = dx / len; ant.vy = dy / len;
     if (dx || dy) ant.angle = Math.atan2(dy, dx);
@@ -352,7 +359,7 @@ export class Game {
   /** 隐藏者冲刺开关：按住空格时叠加加速倍率 */
   setHiderSprint(pid, active) {
     const ant = this.ants.find(a => a.playerId === pid);
-    if (!ant || this._isMarked(ant) || ant.eliminated) return;
+    if (!ant || this._isMarked(ant) || this._isStunned(ant) || ant.eliminated) return;
     ant.sprinting = active;
   }
 
@@ -373,7 +380,7 @@ export class Game {
     if (!ant || this._isMarked(ant)) return;
     // 躲藏点内免疫标记
     if (this._isInsideHidingSpot(ant)) return;
-    // 已获证或已淘汰的隐藏者不可再被标记
+    // 已获胜或已淘汰的隐藏者不可再被标记
     if (ant.isHider && (ant.verified || ant.eliminated)) return;
     if (ant.isHider) {
       ant.lives = Math.max(0, ant.lives - 1);
@@ -603,6 +610,7 @@ export class Game {
       this.events.push({ t: 'score', antId: ant.id, playerId: ant.playerId, score: ant.foodScore, label: ant.hiderLabel });
       if (!ant.verified && ant.foodScore >= this.hiderQuota) {
         ant.verified = true;
+        ant.completeTime = +this.now.toFixed(2);
         this.events.push({ t: 'hider_verified', antId: ant.id, label: ant.hiderLabel });
         this._checkHiderWin();
       }
@@ -657,10 +665,14 @@ export class Game {
     if (ant.pickupProgress < actionTime) return true;
 
     ant.pickupProgress = 0;
-    // 交互完成后才触发警告高亮，取食过程中搜寻者不可见
+    // 交互完成后定身并触发警告高亮，取食过程中搜寻者不可见
+    const stunDur = CONFIG.TOOLS.fakeFood.stunDuration ?? 0.5;
+    ant.stunnedUntil = this.now + stunDur;
+    ant.vx = ant.vy = 0;
+    ant.sprinting = false;
     src.warnUntil = this.now + warnDur;
     this.events.push({ t: 'fake_food_warn', x: src.x, y: src.y, antId: ant.id });
-    return false;
+    return true;
   }
 
   // ---------- 主循环 ----------
@@ -718,6 +730,11 @@ export class Game {
     for (const ant of this.ants) {
       if (this._isMarked(ant)) continue;
       if (ant.isHider && ant.eliminated) continue;
+      if (this._isStunned(ant)) {
+        ant.vx = ant.vy = 0;
+        ant.sprinting = false;
+        continue;
+      }
       // 真人隐藏者取食：真/假食物互斥处理，避免 _processFoodAction 每帧清零 pickupProgress
       let foodBusy;
       if (ant.isHider && !ant.bot && !ant.carrying) {
@@ -773,6 +790,7 @@ export class Game {
     ant.carryingType = null;
     ant.pickupProgress = 0;
     ant.depositProgress = 0;
+    ant.stunnedUntil = 0;
     ant.tripTime = rand(0, CONFIG.PHEROMONE.TAU);
     if (ant.bot) initAI(ant);
     this.events.push({ t: 'hider_respawn', x: ant.x, y: ant.y });
@@ -787,20 +805,32 @@ export class Game {
     }
   }
 
-  /** 所有在场隐藏者均已获证 → 隐藏者阵营胜利 */
+  /** 所有在场隐藏者均已获胜 → 隐藏者阵营胜利 */
   _checkHiderWin() {
     if (this.over) return;
     const active = this.ants.filter(a => this._isActiveHider(a));
     if (active.length > 0 && active.every(a => a.verified)) {
       this.over = true;
       this.winner = ROLE.HIDER;
-      this.reason = '所有隐藏者均已获证！';
+      this.reason = '所有隐藏者均已获胜！';
     }
+  }
+
+  /** 已完成获证的排前，按胜利用时从快到慢；未完成者排后 */
+  _sortHiderScores(list) {
+    return list.sort((a, b) => {
+      const aDone = a.completeTime != null;
+      const bDone = b.completeTime != null;
+      if (aDone && bDone) return a.completeTime - b.completeTime;
+      if (aDone) return -1;
+      if (bDone) return 1;
+      return b.score - a.score;
+    });
   }
 
   /** 每位隐藏者的获证进度（供 HUD 展示） */
   _hiderScoreList() {
-    return this.ants
+    const list = this.ants
       .filter(a => a.isHider)
       .map(a => ({
         antId: a.id,
@@ -809,9 +839,11 @@ export class Game {
         score: a.foodScore,
         quota: this.hiderQuota,
         verified: a.verified,
+        completeTime: a.completeTime,
         lives: a.lives,
         eliminated: a.eliminated,
       }));
+    return this._sortHiderScores(list);
   }
 
   // ---------- 快照 ----------
@@ -842,6 +874,10 @@ export class Game {
           ...(this._isMarked(a) && {
             markedLeft: Math.ceil(a.markedUntil - this.now),
           }),
+          stunned: this._isStunned(a),
+          ...(this._isStunned(a) && {
+            stunnedLeft: +(a.stunnedUntil - this.now).toFixed(2),
+          }),
           ...(a.isHider && {
             lives: a.lives,
             eliminated: a.eliminated,
@@ -850,7 +886,7 @@ export class Game {
           carrying: a.carrying,
           carryingType: a.carrying ? (a.carryingType || 'normal') : null,
           isSelf: role === ROLE.HIDER && a.playerId === viewerPid,
-          // 隐藏者方始终可见队友色；搜寻者仅对已获证的隐藏者下发真色
+          // 隐藏者方始终可见队友色；搜寻者仅对已获胜的隐藏者下发真色
           ...(a.isHider && a.hiderColor && (role === ROLE.HIDER || a.verified) && { hiderColor: a.hiderColor }),
           pickup: role === ROLE.HIDER && a.playerId === viewerPid ? +a.pickupProgress.toFixed(2) : 0,
           deposit: role === ROLE.HIDER && a.playerId === viewerPid ? +a.depositProgress.toFixed(2) : 0,

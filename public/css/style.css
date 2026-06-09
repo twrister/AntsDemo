@@ -99,6 +99,7 @@ html, body {
 }
 .end-hider-detail .food { color: var(--accent); white-space: nowrap; }
 .end-hider-detail .status { font-size: 12px; color: #9a8b6e; white-space: nowrap; }
+.end-hider-row.verified .status { color: var(--hider); font-variant-numeric: tabular-nums; }
 .end-hider-row.verified .label,
 .end-hider-row.verified .status { color: var(--hider); }
 .end-hider-row.eliminated .label { color: #8a7a6a; text-decoration: line-through; }
@@ -259,6 +260,10 @@ html, body {
 }
 .hider-score-row .label {
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
+}
+.hider-score-row .victory-time {
+  margin-left: 6px; font-size: 12px; font-variant-numeric: tabular-nums;
+  color: var(--hider); white-space: nowrap;
 }
 .hider-score-row .progress { font-variant-numeric: tabular-nums; color: var(--accent); white-space: nowrap; }
 .hider-score-row.verified .label { color: var(--hider); }

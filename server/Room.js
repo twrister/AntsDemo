@@ -413,6 +413,7 @@ export class Room {
       case 'mark': if (g && p.role === ROLE.SEEKER) g.markAnt(id, msg.antId); break;
       case 'tool_beam': if (g && p.role === ROLE.SEEKER) g.setToolBeam(id, msg.tool, msg.x, msg.y, !!msg.active); break;
       case 'place_fake_food': if (g && p.role === ROLE.SEEKER) g.placeFakeFood(id, msg.x, msg.y); break;
+      case 'use_path_echo': if (g && p.role === ROLE.SEEKER) g.usePathEcho(id); break;
       case 'cursor': if (g && p.role === ROLE.SEEKER) g.setSeekerCursor(id, msg.x, msg.y); break;
     }
   }

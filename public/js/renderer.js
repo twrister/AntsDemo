@@ -65,6 +65,13 @@ export class Renderer {
     for (const beam of lightBeams) this._drawLightBeam(ctx, beam, opts.time);
     for (const beam of sniffBeams) this._drawSniffBeam(ctx, beam, opts.time);
 
+    if (opts.role === ROLE.SEEKER && (snap.pathEchoLeft ?? 0) > 0) {
+      for (const ant of snap.ants) {
+        if (this._shouldHideAntInNest(ant, snap.nest, opts)) continue;
+        this._drawAntTrail(ctx, ant, opts);
+      }
+    }
+
     for (const ant of snap.ants) {
       if (this._shouldHideAntInNest(ant, snap.nest, opts)) continue;
       if (ant.hiding && opts.role === ROLE.SEEKER) {
@@ -109,6 +116,39 @@ export class Renderer {
       }
       ctx.restore();
     }
+  }
+
+  /** 轨迹残影：按段速度着色，慢速偏蓝、常速偏绿黄、高速偏红 */
+  _drawAntTrail(ctx, ant, opts) {
+    const pts = ant.trailPoints;
+    if (!pts || pts.length < 2) return;
+    const tickRate = 10;
+    const refSpeed = opts.world?.aiSpeedBase ?? 60;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let i = 1; i < pts.length; i++) {
+      const p0 = pts[i - 1];
+      const p1 = pts[i];
+      const dist = Math.hypot(p1.x - p0.x, p1.y - p0.y);
+      const speed = dist * tickRate;
+      const ratio = speed / refSpeed;
+      const age = i / (pts.length - 1);
+      ctx.beginPath();
+      ctx.moveTo(p0.x, p0.y);
+      ctx.lineTo(p1.x, p1.y);
+      ctx.strokeStyle = this._trailSpeedColor(ratio, 0.35 + age * 0.55);
+      ctx.lineWidth = 1.5 + age * 1.5;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /** 速度比 → 轨迹颜色（蓝=慢，绿黄=常速，红=快） */
+  _trailSpeedColor(ratio, alpha = 0.85) {
+    const t = Math.max(0, Math.min(2, ratio)) / 2;
+    const hue = 220 - t * 220;
+    return `hsla(${hue}, 88%, 58%, ${alpha.toFixed(3)})`;
   }
 
   /** 计算蚂蚁在强光束内的照明强度（0-1，中心最强） */

@@ -87,8 +87,48 @@ export class Game {
       _lastLightBeamUntil: 0,
       sniffBeam: null,
       _lastSniffBeamUntil: 0,
+      pathEchoUntil: 0,
       cursor: null,
     };
+  }
+
+  /** 轨迹残影保留时长 (秒) */
+  _trailDurationSec() {
+    return CONFIG.TOOLS.pathEcho?.trailDuration ?? 6;
+  }
+
+  /** 环形轨迹缓冲容量（按 tick 率与保留时长估算） */
+  _trailCapacity() {
+    return Math.ceil(this._trailDurationSec() * CONFIG.TICK_RATE) + 2;
+  }
+
+  /** 每 tick 写入蚂蚁当前坐标到环形缓冲 */
+  _recordAntTrail(ant) {
+    const cap = this._trailCapacity();
+    let trail = ant._trail;
+    if (!trail) {
+      trail = { buf: new Array(cap), head: 0, len: 0, cap };
+      ant._trail = trail;
+    }
+    trail.buf[trail.head] = { x: ant.x, y: ant.y, t: this.now };
+    trail.head = (trail.head + 1) % cap;
+    if (trail.len < cap) trail.len++;
+  }
+
+  /** 读取蚂蚁最近 trailDuration 秒内的轨迹点（搜寻者快照用） */
+  _getTrailPoints(ant) {
+    const trail = ant._trail;
+    if (!trail || trail.len === 0) return [];
+    const cutoff = this.now - this._trailDurationSec();
+    const start = trail.len < trail.cap ? 0 : trail.head;
+    const points = [];
+    for (let i = 0; i < trail.len; i++) {
+      const pt = trail.buf[(start + i) % trail.cap];
+      if (pt.t >= cutoff) {
+        points.push({ x: Math.round(pt.x), y: Math.round(pt.y) });
+      }
+    }
+    return points;
   }
 
   /** 读取某工具当前 CD 时长（秒），devCfg 可覆盖 config 默认值 */
@@ -495,6 +535,9 @@ export class Game {
   /** 点击放置类工具（非光束） */
   static PLACE_TOOLS = new Set(['fakeFood']);
 
+  /** 即时生效类工具（无需地图落点） */
+  static INSTANT_TOOLS = new Set(['pathEcho']);
+
   /**
    * 搜寻者放置假食物：不释放信息素，AI 不可见，真人尝试搬运时触发警告高亮。
    */
@@ -527,6 +570,19 @@ export class Game {
     state._toolsUsed = true;
     if (!this.noToolCd) state.toolCooldownUntil[tool] = this.now + this._toolCd(tool);
     this.events.push({ t: 'tool', tool, x: px, y: py });
+  }
+
+  /** 轨迹残影：立即开启 6 秒残影可视化，快照下发 trailPoints[] */
+  usePathEcho(seekerId) {
+    const state = this.seekerStates.get(seekerId);
+    const tool = 'pathEcho';
+    if (!state || this.over || !Game.INSTANT_TOOLS.has(tool)) return;
+    if (!this._canUseTool(state, tool)) return;
+    const def = CONFIG.TOOLS.pathEcho;
+    state._toolsUsed = true;
+    if (!this.noToolCd) state.toolCooldownUntil[tool] = this.now + this._toolCd(tool);
+    state.pathEchoUntil = this.now + (def.duration ?? 6);
+    this.events.push({ t: 'tool', tool });
   }
 
   /**
@@ -821,6 +877,8 @@ export class Game {
       this.reason = '时间耗尽，搜寻者守住了蚁穴';
     }
 
+    for (const ant of this.ants) this._recordAntTrail(ant);
+
     this._pheroTickCount++;
   }
 
@@ -932,6 +990,8 @@ export class Game {
       ? this.ants.filter(a => !this._isInsideNest(a))
       : this.ants
     ).filter(a => !(a.isHider && a.eliminated));
+    const seekerState = role === ROLE.SEEKER ? this.seekerStates.get(viewerPid) : null;
+    const pathEchoActive = !!(seekerState && seekerState.pathEchoUntil > this.now);
     const ants = visibleAnts.map((a) => {
         const base = {
           id: a.id,
@@ -939,9 +999,14 @@ export class Game {
           y: Math.round(a.y),
           angle: +a.angle.toFixed(2),
         };
+        const trailPoints = pathEchoActive ? this._getTrailPoints(a) : undefined;
         // 搜寻者视角：躲藏点内且未获胜 → 仅下发影子所需字段
         if (role === ROLE.SEEKER && this._isInsideHidingSpot(a) && !a.verified) {
-          return { ...base, hiding: true };
+          return {
+            ...base,
+            hiding: true,
+            ...(trailPoints?.length ? { trailPoints } : {}),
+          };
         }
         return {
           ...base,
@@ -966,6 +1031,7 @@ export class Game {
           ...(a.isHider && a.hiderColor && (role === ROLE.HIDER || a.verified) && { hiderColor: a.hiderColor }),
           pickup: role === ROLE.HIDER && a.playerId === viewerPid ? +a.pickupProgress.toFixed(2) : 0,
           deposit: role === ROLE.HIDER && a.playerId === viewerPid ? +a.depositProgress.toFixed(2) : 0,
+          ...(trailPoints?.length ? { trailPoints } : {}),
         };
       });
 
@@ -1042,6 +1108,9 @@ export class Game {
             ? Object.fromEntries(Object.keys(CONFIG.TOOLS).map((k) => [k, this._toolCdLeft(myState, k)]))
             : {},
           markCdLeft: myState ? this._markCdLeft(myState) : 0,
+          pathEchoLeft: myState && myState.pathEchoUntil > this.now
+            ? +(myState.pathEchoUntil - this.now).toFixed(1)
+            : 0,
         };
       })()),
       debugMode: this.debugMode,

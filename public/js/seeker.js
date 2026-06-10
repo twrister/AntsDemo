@@ -5,6 +5,8 @@ import { computeFitZoom } from './const.js';
 const PLACE_TOOLS = new Set(['fakeFood']);
 /** 持续照射类工具：选中后需显示生效范围预览 */
 const BEAM_TOOLS = new Set(['panic', 'sniff']);
+/** 即时生效类工具：快捷键/工具栏点击后直接施放 */
+const INSTANT_TOOLS = new Set(['pathEcho']);
 
 export class SeekerController {
   constructor({ canvas, input, net, world }) {
@@ -193,7 +195,21 @@ export class SeekerController {
 
   _activateTool(tool) {
     if (this._isToolBlocked(tool)) return;
+    if (INSTANT_TOOLS.has(tool)) {
+      this._useInstantTool(tool);
+      return;
+    }
     this.armedTool = tool; // 进入瞄准，等待点击落点
+    this._refreshArmed();
+  }
+
+  /** 即时类工具：无需地图落点，直接请求服务器施放 */
+  _useInstantTool(tool) {
+    if (this._isToolBlocked(tool)) return;
+    if (tool === 'pathEcho') {
+      this.net.send({ type: 'use_path_echo' });
+    }
+    this.armedTool = null;
     this._refreshArmed();
   }
 
@@ -234,7 +250,11 @@ export class SeekerController {
   }
 
   _refreshArmed() {
-    for (const key of this.toolKeys) this.toolEls[key].classList.toggle('active', key === this.armedTool);
+    const pathEchoLeft = this.lastSnap?.pathEchoLeft ?? 0;
+    for (const key of this.toolKeys) {
+      const active = key === this.armedTool || (key === 'pathEcho' && pathEchoLeft > 0);
+      this.toolEls[key].classList.toggle('active', active);
+    }
     const aiming = !!this.armedTool && BEAM_TOOLS.has(this.armedTool) && !this.beamActive;
     this.canvas.classList.toggle('tool-aiming', aiming);
   }
@@ -288,10 +308,20 @@ export class SeekerController {
     for (const key of this.toolKeys) {
       const cover = this.toolEls[key].querySelector('.cover');
       const cdLeft = snap.toolCooldownLeft?.[key] ?? 0;
+      const pathEchoLeft = key === 'pathEcho' ? (snap.pathEchoLeft ?? 0) : 0;
       const blocked = !this.noToolCd && cdLeft > 0;
-      if (blocked) { cover.classList.remove('hidden'); cover.textContent = cdLeft.toFixed(0); }
-      else cover.classList.add('hidden');
+      const active = pathEchoLeft > 0;
+      if (active) {
+        cover.classList.remove('hidden');
+        cover.textContent = pathEchoLeft.toFixed(0);
+      } else if (blocked) {
+        cover.classList.remove('hidden');
+        cover.textContent = cdLeft.toFixed(0);
+      } else {
+        cover.classList.add('hidden');
+      }
     }
+    this._refreshArmed();
 
     // 标记冷却期间鼠标显示不可点击样式
     const markBlocked = this._isMarkBlocked(snap) && !this.armedTool;

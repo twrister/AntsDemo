@@ -22,6 +22,7 @@ export const C2S = {
   MARK:         'mark',         // 搜寻者标记蚂蚁 { antId }（多名搜寻者各自独立冷却）
   TOOL_BEAM:    'tool_beam',    // 搜寻者持续照射 { tool, x, y, active }（按连接玩家路由）
   PLACE_FAKE_FOOD: 'place_fake_food', // 搜寻者放置假食物 { x, y }
+  USE_PATH_ECHO:  'use_path_echo',   // 搜寻者轨迹残影 {}
   CURSOR:       'cursor',       // 搜寻者鼠标世界坐标 { x, y }（隐藏者见多只大手）
   RESTART:      'restart',      // 结算后重开（返回大厅）
   SOLO_START:   'solo_start',   // 单机调试 { role }

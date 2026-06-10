@@ -60,6 +60,7 @@ export const CONFIG = {
     panic:    { name: '强光照射', cd: 30, duration: 4, radius: 120, desc: '在鼠标位置投射强光，范围内 AI 蚂蚁逃离光源，隐藏者不受影响。选中后点击地图开始照射，自动持续 4 秒。' },
     sniff:    { name: '气息嗅探', cd: 20, duration: 5, warnDuration: 1, radius: 100, desc: '释放气息探测圈跟随鼠标，嗅探到隐藏者后圈持续变红警告 1 秒后结束；未嗅探到则持续 5 秒。选中后点击地图开始嗅探。' },
     fakeFood: { name: '假食物', cd: 25, warnDuration: 1.5, stunDuration: 0.5, maxCount: 8, lifetime: 40, desc: '在点击位置放置假食物堆，40 秒后消失；外观与真食物相同。AI 蚂蚁不可见且不搬运；真人蚂蚁完成取食交互后定身 0.5 秒并触发短暂高亮警告，不会得分。' },
+    pathEcho: { name: '轨迹残影', cd: 30, duration: 6, trailDuration: 6, desc: '点击后立即显示所有蚂蚁过去 6 秒的移动残影轨迹，轨迹颜色反映移动速度，便于判断步态是否异常。按 [4] 或点击工具栏使用。' },
   },
   /** 调试模式下搜寻者工具是否无 CD（标记冷却不受影响）；默认关闭 */
   DEBUG_NO_CD: false,

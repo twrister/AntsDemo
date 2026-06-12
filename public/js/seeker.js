@@ -39,11 +39,17 @@ export class SeekerController {
 
   /** 窗口尺寸变化时重算 fit 缩放，保持全图可见 */
   _setupResize() {
-    window.addEventListener('resize', () => {
+    this._onResize = () => {
       this.baseZoom = computeFitZoom(this.canvas, this.world);
       this.cam.zoom = this.baseZoom;
       this._clampCam();
-    });
+    };
+    window.addEventListener('resize', this._onResize);
+  }
+
+  /** 销毁控制器，移除窗口监听，避免多局叠加 */
+  destroy() {
+    if (this._onResize) window.removeEventListener('resize', this._onResize);
   }
 
   _setupDrag() {

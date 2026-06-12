@@ -27,6 +27,11 @@ export class Net {
   on(type, cb) { this.handlers[type] = cb; }
   send(obj) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(obj)); }
 
+  /** 清空快照缓冲，避免上一局残留帧污染新对局插值与淘汰状态 */
+  clearBuffer() {
+    this.buffer = [];
+  }
+
   /** 最新快照（无插值延迟，用于标记冷却等即时判定） */
   latestSnap() {
     if (this.buffer.length === 0) return null;

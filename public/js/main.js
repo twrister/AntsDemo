@@ -750,6 +750,8 @@ net.on('lobby', (m) => {
 net.on('dev_tools', applyDevToolsFromServer);
 
 net.on('start', async (m) => {
+  net.clearBuffer();
+  controller?.destroy?.();
   role = m.role;
   world = m.world;
   if (DEBUG_MODE) {
@@ -784,7 +786,9 @@ net.on('events', (events) => {
 
 net.on('end', (m) => {
   running = false;
+  controller?.destroy?.();
   controller = null;
+  net.clearBuffer();
   const won = m.winner === role;
   $('endTitle').textContent = won ? '胜利！' : '失败';
   $('endTitle').style.color = won ? 'var(--hider)' : 'var(--danger)';
@@ -1037,7 +1041,9 @@ function updateMyRoleLine() {
 
 function resetGameUi() {
   running = false;
+  controller?.destroy?.();
   controller = null;
+  net.clearBuffer();
   $('toolbar').classList.add('hidden');
   $('seekerHint').classList.add('hidden');
   $('hiderHint').classList.add('hidden');

@@ -21,6 +21,7 @@ export class HiderController {
     this._spectator = false;
     this._dashKeyHeld = false;
     this._hintEl = document.getElementById('hiderHint');
+    this._defaultHint = this._hintEl?.textContent ?? '';
     this._hintEl.classList.remove('hidden');
     this._buildToolbar();
     this._onResize = () => {
@@ -101,6 +102,20 @@ export class HiderController {
     document.getElementById('toolbar')?.classList.add('hidden');
     this.net.send({ type: 'move', dx: 0, dy: 0 });
     this.net.send({ type: 'sprint', active: false });
+  }
+
+  /** 新对局或复活后退出观战：恢复 4:3 视口、工具栏与默认提示 */
+  _exitSpectator() {
+    if (!this._spectator) return;
+    this._spectator = false;
+    this.cam.zoom = this.hiderZoom;
+    if (this._hintEl) this._hintEl.textContent = this._defaultHint;
+    document.getElementById('toolbar')?.classList.remove('hidden');
+  }
+
+  /** 销毁控制器，移除窗口监听，避免多局叠加 */
+  destroy() {
+    window.removeEventListener('resize', this._onResize);
   }
 
   /** 与服务器同速追向目标点，每帧平滑渲染所有搜寻者强光束 */
@@ -189,6 +204,9 @@ export class HiderController {
         viewport: null,
       };
     }
+
+    // 上一局残留快照可能误触观战；新局存活时需恢复 4:3 视口与工具栏
+    if (this._spectator) this._exitSpectator();
 
     this._handleDashKey();
     this._updateToolbar(snap);

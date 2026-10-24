@@ -4,16 +4,19 @@ import { Renderer } from './renderer.js';
 import { Input } from './input.js';
 import { SeekerController } from './seeker.js';
 import { HiderController } from './hider.js';
-import { ROLE, GROUND_FILL_DEFAULT } from './const.js';
+import { ROLE, GROUND_FILL_DEFAULT, computeFitZoom, computeHiderZoom } from './const.js';
 import {
   viewport, TOUCH_HINTS, POINTER_HINTS, prepareMobileDisplay,
 } from './view.js';
 import { TouchControls } from './touch.js';
+import { MeadowScene, paintMeadowBackdrop } from './scene.js';
 
 const net = new Net();
 const canvas = document.getElementById('canvas');
 viewport.start();
 const renderer = new Renderer(canvas, viewport);
+/** 对局草甸场景（每局开局烘焙一次） */
+const scene = new MeadowScene();
 const input = new Input(canvas, viewport);
 const touch = new TouchControls({ view: viewport, input });
 touch.build(document.getElementById('game'));
@@ -102,10 +105,44 @@ function normalizeSoilFill(raw, fallback = GROUND_FILL_DEFAULT) {
   return fallback;
 }
 
-/** 将土壤底色同步到渲染与 Canvas 占位色 */
+/** 将草地基色同步到渲染与 Canvas 占位色；对局中去抖重建草甸缓存 */
 function applySoilFill(fill) {
-  soilFill = normalizeSoilFill(fill);
+  const next = normalizeSoilFill(fill);
+  const changed = next !== soilFill;
+  soilFill = next;
   document.documentElement.style.setProperty('--soil', soilFill);
+  if (!changed) return;
+  clearTimeout(applySoilFill._timer);
+  applySoilFill._timer = setTimeout(() => {
+    if (running) buildScene();
+    paintLobbyBackdrop();
+  }, 200);
+}
+
+// ---- 草甸场景 ----
+
+/** 按当前角色 / 视口 / 画质烘焙对局草甸（参数未变时复用缓存） */
+function buildScene() {
+  if (!world) return;
+  const zoom = role === ROLE.HIDER
+    ? computeHiderZoom(viewport, world)
+    : Math.max(1, computeFitZoom(viewport, world));
+  scene.build(world, {
+    role, baseColor: soilFill, quality: viewport.quality, dpr: viewport.dpr, zoom,
+  });
+}
+
+let lobbyBgTimer = 0;
+/** 大厅 / 结算背景：静态草甸（去抖，避免旋转时多次重绘） */
+function paintLobbyBackdrop() {
+  clearTimeout(lobbyBgTimer);
+  lobbyBgTimer = setTimeout(() => {
+    const bg = $('lobbyBg');
+    if (!bg || running) return;
+    paintMeadowBackdrop(bg, {
+      w: viewport.w, h: viewport.h, dpr: viewport.dpr, baseColor: soilFill, quality: viewport.quality,
+    });
+  }, 120);
 }
 
 /** 服务端保存的自定义默认值（所有版本/端口共用） */
@@ -776,6 +813,7 @@ net.on('start', async (m) => {
     restoreDevConfig();
   }
   showScreen('game');
+  buildScene();
   if (world?.matchDuration) {
     const left = Math.ceil(world.matchDuration);
     $('timer').textContent = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
@@ -829,9 +867,11 @@ function loop(now) {
   const snap = net.interpolated();
   if (snap && controller) {
     const opts = controller.update(snap, dt);
+    // 开局 world 不含巢穴坐标，首个快照到达后按真实位置校正小径布局
+    scene.syncNest(snap.nest);
     renderer.draw(snap, opts.cam, {
       ...opts, role, world, time: now, showPheromone, foodActionTime: snap.foodActionTime,
-      soilFill, quality: viewport.quality,
+      soilFill, quality: viewport.quality, scene,
     });
     updateHud(snap);
   }
@@ -1044,6 +1084,9 @@ function toast(text, kind) {
 // ---- UI 切换 ----
 
 function showScreen(name) {
+  // 对局中隐藏大厅草甸背景（CSS: body.in-game .lobby-bg）
+  document.body.classList.toggle('in-game', name === 'game');
+  if (name !== 'game') paintLobbyBackdrop();
   $('lobby').classList.toggle('hidden', name !== 'lobby');
   $('game').classList.toggle('hidden', name !== 'game');
   $('endScreen').classList.toggle('hidden', name !== 'end');
@@ -1101,6 +1144,10 @@ function applyInputMode() {
   // 视口/DPR 变化后重设画布后备缓冲，并让控制器重算缩放
   renderer.resize();
   touch.layout();
+  // DPR / 画质档 / 隐藏者缩放变化后重烘草甸（参数未变时 build 直接复用缓存）
+  clearTimeout(applyInputMode._sceneTimer);
+  applyInputMode._sceneTimer = setTimeout(() => { if (running) buildScene(); }, 250);
+  paintLobbyBackdrop();
 
   renderRotateNote();
 }

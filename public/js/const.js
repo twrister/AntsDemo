@@ -1,8 +1,8 @@
 // 客户端共享常量 (与服务器 protocol.js 对应)
 export const ROLE = { SEEKER: 'seeker', HIDER: 'hider' };
 
-/** 场景土壤默认底色（开发者工具可调） */
-export const GROUND_FILL_DEFAULT = '#6a7268';
+/** 草甸默认基色（开发者工具可调，用于给草地色斑定调） */
+export const GROUND_FILL_DEFAULT = '#94b169';
 
 /** 隐藏者视口宽高比 (4:3)，仅 HIDER_VIEW_MODE === 'box' 时用于 letterbox */
 export const HIDER_VIEW_ASPECT = 4 / 3;

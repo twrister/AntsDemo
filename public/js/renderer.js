@@ -4,9 +4,17 @@
 // 坐标约定：所有绘制均使用 CSS 逻辑像素；构造时用 setTransform(dpr, ...) 一次性放大，
 // 因此世界坐标 / 镜头 / 碰撞判定数学与改造前完全一致，只是画面更清晰。
 import { ROLE, GROUND_FILL_DEFAULT } from './const.js';
+import { UI_FONT } from './scene.js';
 
 /** 点击涟漪时长 (ms) */
 const TAP_RIPPLE_MS = 450;
+/** 世界外「桌面」底色（与 UI 纸色一致） */
+const DESK_FILL = '#e9eddf';
+/** 隐藏者 letterbox 留边色 */
+const LETTERBOX_FILL = '#22301f';
+/** 画布文字墨色与描边 */
+const INK = '#304a36';
+const INK_HALO = 'rgba(248,248,237,0.85)';
 
 export class Renderer {
   /**
@@ -34,7 +42,7 @@ export class Renderer {
    * 渲染一帧。
    * @param snap 插值后的世界快照
    * @param cam  镜头 { x, y, zoom } —— 世界坐标中心点
-   * @param opts { role, world, time, viewRadius, lightBeams, sniffBeams, toolPreview, viewport, tapMark, quality }
+   * @param opts { role, world, time, viewRadius, lightBeams, sniffBeams, toolPreview, viewport, tapMark, quality, scene }
    */
   draw(snap, cam, opts) {
     const ctx = this.ctx;
@@ -50,9 +58,10 @@ export class Renderer {
 
     const zoom = cam.zoom || 1;
     const soilFill = opts.soilFill || GROUND_FILL_DEFAULT;
+    const scene = opts.scene?.ready ? opts.scene : null;
     const vp = opts.role === ROLE.HIDER && opts.viewport ? opts.viewport : null;
     if (vp) {
-      ctx.fillStyle = '#2a322c';
+      ctx.fillStyle = LETTERBOX_FILL;
       ctx.fillRect(0, 0, W, H);
       ctx.save();
       ctx.beginPath();
@@ -61,6 +70,10 @@ export class Renderer {
     } else {
       ctx.save();
     }
+    // 世界外区域显示为纸色桌面
+    ctx.fillStyle = DESK_FILL;
+    if (vp) ctx.fillRect(vp.offsetX, vp.offsetY, vp.width, vp.height);
+    else ctx.fillRect(0, 0, W, H);
     // 世界 -> 屏幕变换：以视口中心为锚点
     const cx = vp ? vp.offsetX + vp.width / 2 : W / 2;
     const cy = vp ? vp.offsetY + vp.height / 2 : H / 2;
@@ -68,13 +81,20 @@ export class Renderer {
     ctx.scale(zoom, zoom);
     ctx.translate(-cam.x, -cam.y);
 
-    this._drawGround(ctx, opts.world, soilFill);
+    // 可见世界矩形：用于草甸缓存裁剪
+    const halfW = (vp ? vp.width : W) / (2 * zoom);
+    const halfH = (vp ? vp.height : H) / (2 * zoom);
+    const visible = { left: cam.x - halfW, top: cam.y - halfH, right: cam.x + halfW, bottom: cam.y + halfH };
+    if (!scene || !scene.drawGround(ctx, visible)) {
+      this._drawGround(ctx, opts.world, soilFill);
+    }
+    scene?.drawAnimated(ctx, opts.time, opts.quality);
     // 信息素轨迹绘制在地面之上、蚂蚁之下，呈现搬运通道
     if (this._cachedPhero && opts.showPheromone !== false) {
       this._drawPheromone(ctx, this._cachedPhero, snap.nest, opts);
     }
-    this._drawNest(ctx, snap.nest, opts);
-    this._drawHidingSpots(ctx, snap.hidingSpots ?? opts.world?.hidingSpots, opts);
+    this._drawNest(ctx, snap.nest, opts, scene);
+    this._drawHidingSpots(ctx, snap.hidingSpots ?? opts.world?.hidingSpots, opts, scene);
     this._drawNormalFood(ctx, snap.normalFood);
     this._drawFakeFood(ctx, snap.fakeFood, opts);
     if (opts.toolPreview) this._drawToolRangePreview(ctx, opts.toolPreview, opts.time);
@@ -256,10 +276,29 @@ export class Renderer {
     return dx * dx + dy * dy < nest.radius * nest.radius;
   }
 
-  /** 绘制躲藏点区域：隐藏者见完整提示，搜寻者见暗色遮蔽区 */
-  _drawHidingSpots(ctx, spots, opts) {
+  /**
+   * 绘制躲藏点区域：隐藏者见完整提示，搜寻者见暗色遮蔽区。
+   * 有草甸缓存时静态外观（落叶堆 / 暗色叶冠）已烘焙，这里只叠隐藏者的呼吸描边。
+   */
+  _drawHidingSpots(ctx, spots, opts, scene = null) {
     if (!spots?.length) return;
     const isSeeker = opts?.role === ROLE.SEEKER;
+    if (scene) {
+      if (isSeeker) return;
+      ctx.save();
+      ctx.setLineDash([6, 5]);
+      ctx.lineWidth = 2;
+      for (const spot of spots) {
+        const r = spot.radius || 45;
+        const pulse = 0.92 + 0.08 * Math.sin(opts.time / 900 + spot.x);
+        ctx.beginPath();
+        ctx.arc(spot.x, spot.y, r, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(248,244,214,${(0.7 * pulse).toFixed(3)})`;
+        ctx.stroke();
+      }
+      ctx.restore();
+      return;
+    }
     for (const spot of spots) {
       const r = spot.radius || 45;
       ctx.beginPath();
@@ -290,7 +329,7 @@ export class Renderer {
         ctx.lineWidth = 2.5;
         ctx.stroke();
         ctx.fillStyle = '#9bc48a';
-        ctx.font = '12px sans-serif';
+        ctx.font = `12px ${UI_FONT}`;
         ctx.textAlign = 'center';
         ctx.fillText('躲藏', spot.x, spot.y - r * 0.55);
       }
@@ -331,10 +370,53 @@ export class Renderer {
     ctx.restore();
   }
 
-  _drawNest(ctx, nest, opts) {
+  /** 巢穴标签：UI 字体墨色 + 纸色描边，保证落在沙丘上也清晰 */
+  _drawNestLabel(ctx, x, y) {
+    ctx.save();
+    ctx.font = `600 14px ${UI_FONT}`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 3.5;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = INK_HALO;
+    ctx.strokeText('巢穴', x, y);
+    ctx.fillStyle = INK;
+    ctx.fillText('巢穴', x, y);
+    ctx.restore();
+  }
+
+  _drawNest(ctx, nest, opts, scene = null) {
     if (!nest) return;
     const r = nest.radius || 40;
     const isSeeker = opts?.role === ROLE.SEEKER;
+    if (scene) {
+      // 沙质蚁丘贴图：搜寻者版完全不透明，遮住巢内一切；隐藏者版露出巢室
+      const sprite = scene.nestSprite(r, opts.role);
+      ctx.drawImage(sprite.canvas, nest.x - sprite.half, nest.y - sprite.half, sprite.half * 2, sprite.half * 2);
+      const dep = !isSeeker ? nest.deposit : null;
+      if (dep) {
+        // 巢内粮仓：堆放点画成一间浅色小室
+        const dr = dep.radius || 12;
+        ctx.beginPath();
+        ctx.arc(dep.x, dep.y, dr, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(120,88,50,0.85)';
+        ctx.fill();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = 'rgba(232,211,160,0.8)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = '#e8d3a0';
+        ctx.beginPath();
+        for (const [dx, dy] of [[-3, 1], [3, 0], [0, -3], [0, 3.5]]) {
+          ctx.moveTo(dep.x + dx + 2.6, dep.y + dy);
+          ctx.ellipse(dep.x + dx, dep.y + dy, 2.6, 1.8, dx * 0.3, 0, Math.PI * 2);
+        }
+        ctx.fill();
+      }
+      this._drawNestLabel(ctx, nest.x, nest.y - r * (isSeeker ? 0.62 : 0.55));
+      return;
+    }
     ctx.beginPath();
     ctx.arc(nest.x, nest.y, r, 0, Math.PI * 2);
     if (isSeeker) {
@@ -345,7 +427,7 @@ export class Renderer {
       ctx.lineWidth = 3;
       ctx.stroke();
       ctx.fillStyle = '#e0a93b';
-      ctx.font = '14px sans-serif';
+      ctx.font = `14px ${UI_FONT}`;
       ctx.textAlign = 'center';
       ctx.fillText('巢穴', nest.x, nest.y - r * 0.55);
       return;
@@ -371,7 +453,7 @@ export class Renderer {
       ctx.fill();
     }
     ctx.fillStyle = '#e0a93b';
-    ctx.font = '14px sans-serif';
+    ctx.font = `14px ${UI_FONT}`;
     ctx.textAlign = 'center';
     ctx.fillText('巢穴', nest.x, nest.y - r * 0.35);
   }
@@ -457,32 +539,61 @@ export class Renderer {
     ctx.stroke();
   }
 
-  /** 绘制单个食物堆：按剩余量/容量比例决定圆点大小与颜色深浅 */
+  /**
+   * 绘制单个食物堆：按剩余量/容量比例决定大小与颜色深浅。
+   * 普通 = 奶油色种子碎屑堆；珍稀 = 金色蜜露。假食物也走此方法，外观必须与普通食物一致。
+   */
   _drawFoodPile(ctx, f, type = f.type || 'normal') {
     if (f.amount <= 0) return;
     const isRich = type === 'rich';
     const ratio = (f.capacity > 0) ? f.amount / f.capacity : 0;
     const r = isRich ? 6 + ratio * 10 : 4 + ratio * 8;
-    const alpha = 0.4 + ratio * 0.6;
-    const fill = isRich ? `rgba(224,169,59,${alpha.toFixed(2)})` : `rgba(143,179,107,${alpha.toFixed(2)})`;
-    const stroke = isRich ? `rgba(255,220,120,${(alpha * 0.7).toFixed(2)})` : `rgba(200,230,160,${(alpha * 0.6).toFixed(2)})`;
+    const alpha = 0.55 + ratio * 0.45;
+    // 地面投影
+    ctx.beginPath();
+    ctx.ellipse(f.x + 1.5, f.y + 2, r * 1.05, r * 0.85, 0, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(46,58,28,${(0.22 * alpha).toFixed(3)})`;
+    ctx.fill();
     ctx.beginPath();
     ctx.arc(f.x, f.y, r, 0, Math.PI * 2);
-    ctx.fillStyle = fill;
+    if (isRich) {
+      const g = ctx.createRadialGradient(f.x - r * 0.35, f.y - r * 0.4, r * 0.1, f.x, f.y, r);
+      g.addColorStop(0, `rgba(255,226,140,${alpha.toFixed(2)})`);
+      g.addColorStop(0.6, `rgba(224,169,59,${alpha.toFixed(2)})`);
+      g.addColorStop(1, `rgba(176,120,36,${alpha.toFixed(2)})`);
+      ctx.fillStyle = g;
+    } else {
+      ctx.fillStyle = `rgba(232,211,160,${alpha.toFixed(2)})`;
+    }
     ctx.fill();
-    ctx.strokeStyle = stroke;
-    ctx.lineWidth = isRich ? 2 : 1.5;
+    ctx.strokeStyle = isRich ? `rgba(120,78,20,${(alpha * 0.8).toFixed(2)})` : `rgba(110,82,46,${(alpha * 0.75).toFixed(2)})`;
+    ctx.lineWidth = isRich ? 1.8 : 1.4;
     ctx.stroke();
     if (isRich) {
+      // 高光
+      ctx.beginPath();
+      ctx.ellipse(f.x - r * 0.38, f.y - r * 0.42, r * 0.28, r * 0.16, -0.6, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,250,225,${(0.7 * alpha).toFixed(2)})`;
+      ctx.fill();
       const label = `×${f.score || 3}`;
-      ctx.font = 'bold 12px sans-serif';
+      ctx.font = `bold 12px ${UI_FONT}`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.lineWidth = 3;
-      ctx.strokeStyle = 'rgba(20,16,10,0.85)';
+      ctx.strokeStyle = 'rgba(48,40,20,0.85)';
       ctx.strokeText(label, f.x, f.y);
       ctx.fillStyle = '#fff4d0';
       ctx.fillText(label, f.x, f.y);
+    } else if (r >= 6) {
+      // 种子纹理：几粒深色籽点
+      ctx.fillStyle = `rgba(150,112,62,${(0.8 * alpha).toFixed(2)})`;
+      ctx.beginPath();
+      for (const [dx, dy] of [[-0.35, -0.2], [0.3, -0.3], [0.05, 0.35], [0.4, 0.25], [-0.3, 0.3]]) {
+        const sx = f.x + dx * r, sy = f.y + dy * r;
+        ctx.moveTo(sx + 1.4, sy);
+        ctx.ellipse(sx, sy, 1.4, 0.9, dx + dy, 0, Math.PI * 2);
+      }
+      ctx.fill();
     }
   }
 
@@ -586,6 +697,13 @@ export class Renderer {
   // 核心：按特征绘制一只蚂蚁；illum>0 时在强光下提亮并加轮廓光
   _drawAnt(ctx, ant, opts, illum = 0) {
     const tr = ant.traits;
+    // 地面投影：在草地上托起蚂蚁轮廓（强光二次绘制时不重复叠加）
+    if (illum <= 0) {
+      ctx.beginPath();
+      ctx.ellipse(ant.x + 1.5, ant.y + 2, 9, 9, 0, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(40,52,28,0.28)';
+      ctx.fill();
+    }
     ctx.save();
     if (illum > 0.1) {
       ctx.shadowColor = `rgba(255,248,210,${(0.45 + illum * 0.45).toFixed(2)})`;
@@ -660,9 +778,9 @@ export class Renderer {
       const isRich = ant.carryingType === 'rich';
       ctx.beginPath();
       ctx.arc(0, -r.head - 8, isRich ? 6 : 4.5, 0, Math.PI * 2);
-      ctx.fillStyle = isRich ? '#e0a93b' : '#8fb36b';
+      ctx.fillStyle = isRich ? '#e0a93b' : '#e8d3a0';
       ctx.fill();
-      ctx.strokeStyle = isRich ? '#ffe080' : '#c8e6a0';
+      ctx.strokeStyle = isRich ? '#8a5a16' : '#6e522e';
       ctx.lineWidth = isRich ? 1.6 : 1.2;
       ctx.stroke();
     }
@@ -691,7 +809,7 @@ export class Renderer {
       if (left > 0) {
         const canRespawn = (ant.lives ?? 0) > 0 && !ant.eliminated;
         ctx.fillStyle = '#d6543c';
-        ctx.font = 'bold 13px sans-serif';
+        ctx.font = `bold 13px ${UI_FONT}`;
         ctx.textAlign = 'center';
         ctx.fillText(canRespawn ? `复活 ${left}s` : `冻结 ${left}s`, ant.x, ant.y - 22);
       }
@@ -781,7 +899,7 @@ export class Renderer {
     const cx = W / 2, cy = H / 2;
     const g = ctx.createRadialGradient(cx, cy, radiusPx * 0.6, cx, cy, radiusPx * 1.25);
     g.addColorStop(0, 'rgba(0,0,0,0)');
-    g.addColorStop(1, 'rgba(8,6,3,0.6)');
+    g.addColorStop(1, 'rgba(18,26,14,0.6)');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
 

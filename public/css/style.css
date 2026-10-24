@@ -8,6 +8,19 @@
   --success: #6fc36f;
   --danger: #d6543c;
   --text: #ece3d2;
+
+  /* 刘海 / 挖孔安全区：JS 通过 view.js 读取，CSS 用于布局避让 */
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+
+  /* 触屏控件尺寸（clamp 保证小屏不挤、大屏不虚胖） */
+  --joy-size: clamp(104px, 26vmin, 148px);
+  --wheel-radius: clamp(96px, 26vmin, 152px);
+  --wheel-sector: clamp(52px, 12.5vmin, 72px);
+  --wheel-center: clamp(58px, 13.5vmin, 80px);
+  --touch-gap: calc(14px + var(--sab));
 }
 
 html, body {
@@ -16,6 +29,12 @@ html, body {
   background: var(--bg);
   color: var(--text);
   overflow: hidden;
+  /* 移动端：禁止整页橡皮筋滚动与双击缩放 */
+  position: fixed;
+  inset: 0;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .screen {
@@ -25,6 +44,9 @@ html, body {
   align-items: center;
   justify-content: center;
 }
+
+/* 横屏手机上面板高度可能不足，允许整体滚动而不是裁切 */
+.screen { overflow: auto; }
 .hidden { display: none !important; }
 
 /* 大厅 / 结算面板 */
@@ -32,10 +54,14 @@ html, body {
   background: rgba(43, 36, 25, 0.92);
   border: 1px solid #4a3d28;
   border-radius: 14px;
-  padding: 36px 40px;
-  width: 380px;
+  /* 自适应宽度：桌面仍为 380px 观感，窄屏自动收窄并留出安全区 */
+  padding: clamp(16px, 3.2vh, 36px) clamp(16px, 4vw, 40px);
+  width: min(380px, calc(100vw - 24px - var(--sal) - var(--sar)));
+  max-height: calc(100dvh - 24px - var(--sat) - var(--sab));
+  overflow-y: auto;
   text-align: center;
   box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  margin: auto;
 }
 .panel h1 { font-size: 34px; letter-spacing: 4px; color: var(--accent); }
 .subtitle { color: #9a8b6e; margin: 6px 0 22px; font-size: 14px; letter-spacing: 2px; }
@@ -62,7 +88,7 @@ html, body {
 .hint { font-size: 12px; color: #8a7c60; margin-top: 14px; line-height: 1.5; }
 
 /* 结算面板 */
-.end-panel { width: 420px; text-align: left; }
+.end-panel { width: min(420px, calc(100vw - 24px - var(--sal) - var(--sar))); text-align: left; }
 .end-panel h1 { text-align: center; margin-bottom: 8px; }
 .end-reason {
   text-align: center; font-size: 14px; color: #9a8b6e;
@@ -108,7 +134,30 @@ html, body {
 .end-panel button { margin-top: 4px; }
 
 /* 宽面板（多房间大厅） */
-.wide-panel { width: 480px; max-height: 90vh; overflow-y: auto; text-align: left; }
+.wide-panel {
+  width: min(480px, calc(100vw - 24px - var(--sal) - var(--sar)));
+  max-height: calc(100dvh - 24px - var(--sat) - var(--sab));
+  overflow-y: auto; text-align: left;
+}
+
+/* 大厅两列布局：宽屏并排，窄屏（竖屏手机）自动堆叠成一列 */
+.lobby-panel { width: min(760px, calc(100vw - 24px - var(--sal) - var(--sar))); }
+.lobby-panel {
+  display: grid;
+  grid-template-columns: minmax(232px, 1fr) minmax(272px, 1.2fr);
+  gap: 6px 22px;
+  align-items: start;
+}
+.lobby-panel .lobby-head { grid-column: 1 / -1; }
+.lobby-panel .lobby-col { min-width: 0; }
+.lobby-panel .lobby-col-rooms .section-header { margin-top: 0; }
+.lobby-panel .room-list { max-height: min(46vh, 260px); }
+
+/* 两列最小需求 232+272+22 = 526 → 视口 < 550 时堆叠 */
+@media (max-width: 549px) {
+  .lobby-panel { grid-template-columns: 1fr; }
+  .lobby-panel .room-list { max-height: 34vh; }
+}
 .wide-panel h1 { text-align: center; }
 .wide-panel .subtitle { text-align: center; }
 
@@ -161,6 +210,26 @@ html, body {
 /* 房间内视图 */
 .room-header { text-align: center; margin-bottom: 16px; }
 .room-header h2 { font-size: 20px; color: var(--accent); letter-spacing: 2px; }
+.room-header #myRoleLine { font-size: 15px; margin: 8px 0 0; }
+
+/* 房间面板两列：左=玩家，右=设置与行动 */
+.room-panel {
+  width: min(700px, calc(100vw - 24px - var(--sal) - var(--sar)));
+  display: grid;
+  grid-template-columns: minmax(224px, 1fr) minmax(252px, 1fr);
+  gap: 4px 22px;
+  align-items: start;
+}
+.room-panel .room-header { grid-column: 1 / -1; }
+.room-panel .room-col { min-width: 0; }
+.room-panel .match-duration-row { margin: 0 0 8px; }
+.room-panel .action-row { margin-top: 12px; }
+.room-panel .room-rules { font-size: 11px; }
+.room-panel #playerList { max-height: min(40vh, 220px); overflow-y: auto; }
+
+@media (max-width: 549px) {
+  .room-panel { grid-template-columns: 1fr; }
+}
 
 .leave-row { margin-top: 8px; }
 #leaveRoomBtn {
@@ -227,7 +296,14 @@ html, body {
 .role-hider { color: var(--hider); }
 
 /* 游戏 */
-#canvas { display: block; width: 100vw; height: 100vh; background: var(--soil); cursor: grab; }
+/* 尺寸由 view.js 写入 style.width/height（CSS 逻辑像素），不要在此写死 100vw/100vh */
+#canvas {
+  display: block; position: absolute; inset: 0;
+  background: var(--soil); cursor: grab;
+  touch-action: none;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
 #canvas.dragging { cursor: grabbing; }
 #canvas.mark-cooldown { cursor: not-allowed; }
 #canvas.mark-cooldown.dragging { cursor: grabbing; }
@@ -235,14 +311,28 @@ html, body {
 #canvas.tool-aiming.dragging { cursor: grabbing; }
 
 .hud {
-  position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+  position: absolute;
+  top: calc(16px + var(--sat));
+  left: 50%; transform: translateX(-50%);
   display: flex; gap: 14px; pointer-events: none; align-items: center;
+  max-width: calc(100vw - 24px - var(--sal) - var(--sar));
 }
+
+/* 右上角：退出对局（触屏唯一出口） */
+.hud-right {
+  position: absolute;
+  top: calc(16px + var(--sat));
+  right: calc(16px + var(--sar));
+  display: flex; gap: 8px; align-items: center;
+  z-index: 21;
+}
+#exitBtn { color: #e8a090; border-color: #5c3228; }
+#exitBtn:hover { background: #4a2820; color: #f0b8ac; border-color: #7a4436; }
 
 /* 左上角：各隐藏者获胜进度 */
 .hider-score-panel {
-  position: absolute; top: 16px; left: 16px;
-  min-width: 168px; max-width: 240px;
+  position: absolute; top: calc(16px + var(--sat)); left: calc(16px + var(--sal));
+  min-width: 168px; max-width: min(240px, 40vw);
   background: rgba(20,17,12,0.88); border: 1px solid #4a3d28; border-radius: 10px;
   padding: 10px 12px; pointer-events: none;
 }
@@ -304,21 +394,24 @@ html, body {
   background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center;
   font-size: 20px; font-weight: 700; color: var(--accent);
 }
-/* 工具悬停说明 */
-.tool-tip {
-  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
-  width: 200px; padding: 8px 10px; border-radius: 8px;
-  background: rgba(12,10,6,0.95); border: 1px solid #6b5736;
-  font-size: 12px; line-height: 1.45; color: #d4c9a8; text-align: left;
-  pointer-events: none; opacity: 0; transition: opacity .15s;
-  z-index: 10;
+/* 工具悬停说明（仅精确指针设备；触屏用长按气泡） */
+@media (hover: hover) and (pointer: fine) {
+  .tool-tip {
+    position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    width: 200px; padding: 8px 10px; border-radius: 8px;
+    background: rgba(12,10,6,0.95); border: 1px solid #6b5736;
+    font-size: 12px; line-height: 1.45; color: #d4c9a8; text-align: left;
+    pointer-events: none; opacity: 0; transition: opacity .15s;
+    z-index: 10;
+  }
+  .tool:hover .tool-tip { opacity: 1; }
 }
-.tool:hover .tool-tip { opacity: 1; }
 
 .bottom-hint {
-  position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+  position: absolute; bottom: calc(18px + var(--sab)); left: 50%; transform: translateX(-50%);
   font-size: 13px; color: #b3a98a; background: rgba(20,17,12,0.7);
   padding: 6px 16px; border-radius: 20px; pointer-events: none; white-space: nowrap;
+  max-width: calc(100vw - 32px); overflow: hidden; text-overflow: ellipsis;
 }
 
 /* HUD 按钮（信息素开关、DEV 按钮） */
@@ -326,15 +419,19 @@ html, body {
   font-size: 13px; font-weight: 600; padding: 6px 12px; cursor: pointer;
   border: 1px solid #4a3d28; background: rgba(20,17,12,0.8); color: #9a8b6e;
   border-radius: 8px; pointer-events: auto; transition: all .15s; letter-spacing: 1px;
+  font-family: inherit; -webkit-tap-highlight-color: transparent;
 }
 .hud-btn:hover { border-color: var(--accent); color: var(--accent); }
+.hud-btn:active { transform: scale(0.96); }
 .hud-btn.phero-on { border-color: rgba(80,220,200,0.6); color: rgba(80,220,200,0.9); }
 .hud-btn.phero-off { border-color: #4a3d28; color: #5a5040; }
 
 /* 开发者工具面板 */
 .dev-panel {
-  position: absolute; top: 56px; right: 16px;
-  width: 380px; max-height: calc(100vh - 80px); overflow-y: auto; overflow-x: hidden;
+  position: absolute; top: calc(56px + var(--sat)); right: calc(16px + var(--sar));
+  width: min(380px, calc(100vw - 24px - var(--sal) - var(--sar)));
+  max-height: calc(100dvh - 80px - var(--sat) - var(--sab));
+  overflow-y: auto; overflow-x: hidden;
   background: rgba(18,14,9,0.96); border: 1px solid #4a3d28; border-radius: 12px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.6); z-index: 100; font-size: 13px;
 }
@@ -422,3 +519,330 @@ html, body {
   80% { opacity: 0.7; }
   100% { opacity: 0; }
 }
+
+/* ==========================================================================
+   触屏操作层：左下虚拟摇杆 + 右下冲刺钮 + 技能轮盘
+   仅触屏模式可见（body[data-input="touch"]），桌面布局完全不受影响。
+   ========================================================================== */
+
+.touch-layer {
+  position: absolute; inset: 0;
+  pointer-events: none;      /* 空白处点击穿透到画布 */
+  z-index: 20;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.touch-layer > * { pointer-events: auto; }
+
+/* --- 虚拟摇杆 --- */
+.joystick {
+  position: absolute;
+  left: calc(18px + var(--sal));
+  bottom: calc(18px + var(--sab));
+  width: var(--joy-size); height: var(--joy-size);
+  border-radius: 50%;
+  background: radial-gradient(circle at 50% 50%, rgba(30,26,18,0.42), rgba(18,15,10,0.28));
+  border: 1.5px solid rgba(224,169,59,0.28);
+  box-shadow: inset 0 0 26px rgba(0,0,0,0.36);
+  touch-action: none;
+  transition: border-color .15s, background .15s;
+}
+.joystick.active {
+  border-color: rgba(224,169,59,0.6);
+  background: radial-gradient(circle at 50% 50%, rgba(46,38,24,0.52), rgba(18,15,10,0.32));
+}
+/* 内圈刻度：8 方向参考 */
+.joystick .joy-ring {
+  position: absolute; inset: 14%;
+  border-radius: 50%;
+  border: 1px dashed rgba(224,169,59,0.16);
+}
+.joystick .joy-knob {
+  position: absolute; left: 50%; top: 50%;
+  width: 46%; height: 46%;
+  margin-left: -23%; margin-top: -23%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #f0c463, #b8862c 72%);
+  border: 1.5px solid rgba(255,225,160,0.5);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.45), inset 0 -3px 8px rgba(0,0,0,0.28);
+  transition: transform .12s cubic-bezier(.2,.8,.3,1);
+  will-change: transform;
+}
+.joystick.active .joy-knob {
+  transition: none;           /* 拖动中不要缓动，跟手 */
+  background: radial-gradient(circle at 38% 32%, #ffd97a, #caa040 72%);
+}
+
+/* --- 冲刺切换钮（仅隐藏者） --- */
+.sprint-toggle {
+  position: absolute;
+  right: calc(20px + var(--sar));
+  bottom: calc(var(--wheel-radius) * 2 + 26px + var(--sab));
+  width: clamp(62px, 14vmin, 80px); height: clamp(62px, 14vmin, 80px);
+  border-radius: 50%;
+  border: 1.5px solid rgba(111,195,111,0.42);
+  background: radial-gradient(circle at 50% 45%, rgba(34,52,34,0.72), rgba(18,24,16,0.62));
+  color: #9ee09e; font-family: inherit; font-size: clamp(11px, 2.7vmin, 14px);
+  font-weight: 700; letter-spacing: 1px; cursor: pointer;
+  touch-action: none; -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.42);
+  transition: transform .1s, box-shadow .15s, background .15s;
+}
+.sprint-toggle:active { transform: scale(0.94); }
+.sprint-toggle.sprinting {
+  background: radial-gradient(circle at 50% 45%, rgba(80,190,90,0.92), rgba(40,110,46,0.9));
+  border-color: rgba(160,232,164,0.9); color: #0f2410;
+  box-shadow: 0 0 22px rgba(111,195,111,0.55);
+}
+
+/* --- 技能轮盘 --- */
+/* 容器尺寸 = 2×轨道半径 + 一个扇区直径，保证扇区贴边不溢出 */
+.skill-wheel {
+  --wheel-size: calc(var(--wheel-radius) * 2 + var(--wheel-sector));
+  position: absolute;
+  right: calc(10px + var(--sar));
+  bottom: calc(10px + var(--sab));
+  width: var(--wheel-size); height: var(--wheel-size);
+  pointer-events: none;
+  touch-action: none;
+}
+/* 轮盘底衬：一眼看出「可转」的区域 */
+.skill-wheel::before {
+  content: '';
+  position: absolute; inset: 18%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(20,17,12,0.32) 30%, rgba(20,17,12,0.06) 68%, transparent 72%);
+  pointer-events: none;
+}
+
+.wheel-sector {
+  position: absolute; left: 50%; top: 50%;
+  width: var(--wheel-sector); height: var(--wheel-sector);
+  margin-left: calc(var(--wheel-sector) / -2);
+  margin-top: calc(var(--wheel-sector) / -2);
+  /* 极坐标定位：先转到角度，再沿轨道外推，最后把按钮转正 */
+  transform: rotate(var(--a)) translateY(calc(var(--wheel-radius) * -1)) rotate(calc(-1 * var(--a)));
+  border-radius: 50%;
+  border: 1.5px solid rgba(74,61,40,0.95);
+  background: radial-gradient(circle at 50% 35%, rgba(40,34,24,0.95), rgba(20,17,12,0.95));
+  color: var(--text); font-family: inherit; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; touch-action: none; -webkit-tap-highlight-color: transparent;
+  pointer-events: auto;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.4);
+  transition: border-color .15s, box-shadow .15s, filter .1s;
+}
+.wheel-sector:active { filter: brightness(1.25); }
+.wheel-sector.active {
+  border-color: var(--accent); color: var(--accent);
+  box-shadow: 0 0 18px rgba(224,169,59,0.5);
+}
+.wheel-sector .wheel-glyph {
+  font-size: clamp(15px, 3.6vmin, 20px); line-height: 1; color: inherit;
+  opacity: 0.92;
+}
+.wheel-sector .wheel-name {
+  font-size: clamp(9px, 2.2vmin, 11px); line-height: 1.1; letter-spacing: 0;
+  color: #cfc3a4; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.wheel-sector.active .wheel-name { color: var(--accent); }
+.wheel-sector.cooling { opacity: 0.55; }
+
+/* 冷却环：conic-gradient 按 --cd (1→0) 递减 */
+.wheel-sector .cd-ring,
+.wheel-center .cd-ring {
+  position: absolute; inset: -3px;
+  border-radius: 50%;
+  display: none;
+  pointer-events: none;
+  background: conic-gradient(
+    rgba(224,169,59,0.85) calc(var(--cd, 0) * 360deg),
+    rgba(0,0,0,0) 0
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+}
+.wheel-sector .cd-ring.show,
+.wheel-center .cd-ring.show { display: block; }
+.wheel-sector .cd-text,
+.wheel-center .cd-text {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: clamp(15px, 3.6vmin, 20px); font-weight: 800;
+  color: var(--accent); font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.85);
+  pointer-events: none;
+}
+.wheel-sector .cd-text:empty,
+.wheel-center .cd-text:empty { display: none; }
+
+/* 轮盘中心：主按钮（搜寻者=标记/取消，隐藏者=突进） */
+.wheel-center {
+  position: absolute; left: 50%; top: 50%;
+  width: var(--wheel-center); height: var(--wheel-center);
+  margin-left: calc(var(--wheel-center) / -2);
+  margin-top: calc(var(--wheel-center) / -2);
+  border-radius: 50%;
+  border: 1.5px solid rgba(224,169,59,0.55);
+  background: radial-gradient(circle at 50% 38%, rgba(74,58,30,0.95), rgba(26,21,13,0.96));
+  color: var(--accent); font-family: inherit; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px; touch-action: none; -webkit-tap-highlight-color: transparent;
+  pointer-events: auto;
+  box-shadow: 0 0 20px rgba(224,169,59,0.24);
+  transition: transform .1s, box-shadow .15s;
+}
+.wheel-center:active { transform: scale(0.94); }
+.wheel-center:disabled { opacity: 0.4; cursor: not-allowed; }
+.wheel-center .center-glyph { font-size: clamp(18px, 4.2vmin, 24px); line-height: 1; }
+.wheel-center .center-label {
+  font-size: clamp(9px, 2.2vmin, 11px); color: #cfc3a4; letter-spacing: 0;
+}
+.wheel-center.cooling { opacity: 0.62; }
+
+/* 触屏长按说明气泡 */
+.wheel-tip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  max-width: min(220px, 52vw);
+  padding: 8px 11px; border-radius: 8px;
+  background: rgba(12,10,6,0.96); border: 1px solid #6b5736;
+  font-size: 12px; line-height: 1.45; color: #d4c9a8;
+  pointer-events: none; z-index: 30;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+}
+
+/* ==========================================================================
+   竖屏遮罩：移动端必须横屏游玩
+   ========================================================================== */
+.rotate-hint {
+  position: fixed; inset: 0; z-index: 200;
+  display: none;
+  flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; background: var(--bg); text-align: center;
+  padding: var(--sat) var(--sar) var(--sab) var(--sal);
+}
+.rotate-hint .rotate-icon {
+  font-size: 56px; color: var(--accent);
+  animation: rotate-nudge 1.8s ease-in-out infinite;
+  line-height: 1;
+}
+.rotate-hint .rotate-title {
+  font-size: 20px; letter-spacing: 3px; color: var(--accent); font-weight: 700;
+}
+.rotate-hint .rotate-note { font-size: 13px; color: #8a7c60; }
+.rotate-hint .rotate-tip { font-size: 12px; color: #6b6355; max-width: 260px; line-height: 1.5; }
+@keyframes rotate-nudge {
+  0%, 45% { transform: rotate(0deg); }
+  70%, 100% { transform: rotate(-90deg); }
+}
+
+/* 触屏设备竖屏：挡住全部交互，提示横屏（覆盖大厅/对局/结算所有界面） */
+@media (orientation: portrait) and (pointer: coarse) {
+  .rotate-hint { display: flex; }
+  .touch-layer { display: none; }
+}
+/* 强制触屏模式（桌面 DevTools 模拟）同样遵守。
+   这里只看 orientation 媒体查询、不看 JS 标记：遮罩的显示完全由 CSS 决定，
+   JS 状态滞后或未加载时横屏也不会被误挡住。 */
+body[data-input="touch"] .touch-layer { display: block; }
+@media (orientation: portrait) {
+  body[data-input="touch"] .rotate-hint { display: flex; }
+  body[data-input="touch"] .touch-layer { display: none; }
+}
+
+/* ==========================================================================
+   横屏紧凑布局：手机横屏高度约 360–430px，需要压缩留白
+   ========================================================================== */
+@media (orientation: landscape) and (max-height: 620px) {
+  :root {
+    --joy-size: clamp(96px, 24vmin, 124px);
+    --wheel-radius: clamp(84px, 23vmin, 126px);
+    --wheel-sector: clamp(46px, 11vmin, 62px);
+    --wheel-center: clamp(52px, 12vmin, 68px);
+  }
+  .panel { padding: 16px 20px; border-radius: 12px; }
+  .panel h1 { font-size: 24px; letter-spacing: 3px; }
+  .panel .subtitle { font-size: 12px; margin: 4px 0 12px; letter-spacing: 1px; }
+  .panel input { padding: 9px 11px; margin-bottom: 10px; font-size: 14px; }
+  .panel button { padding: 10px; font-size: 15px; }
+  .end-panel { width: min(560px, calc(100vw - 24px - var(--sal) - var(--sar))); }
+  .end-panel h1 { font-size: 24px; }
+  .end-stats { margin-bottom: 12px; }
+  .hint { font-size: 11px; margin-top: 8px; }
+
+  .hud { top: calc(8px + var(--sat)); gap: 8px; }
+  .hud-item { padding: 5px 11px; font-size: 14px; border-radius: 7px; }
+  .lives-hud, .mark-timer { font-size: 13px; }
+  .hud-right { top: calc(8px + var(--sat)); right: calc(10px + var(--sar)); }
+  .hud-btn { padding: 5px 10px; font-size: 12px; }
+  .hider-score-panel {
+    top: calc(8px + var(--sat)); left: calc(10px + var(--sal));
+    min-width: 140px; padding: 7px 9px; border-radius: 8px;
+  }
+  .hider-score-panel .panel-title { font-size: 10px; margin-bottom: 5px; }
+  .hider-score-row { font-size: 12px; padding: 3px 0; }
+  .bottom-hint { font-size: 11px; padding: 5px 12px; bottom: calc(10px + var(--sab)); }
+  /* 桌面工具栏同步压缩，避免在矮屏上顶到画布中央 */
+  .toolbar { bottom: 52px; gap: 8px; }
+  .tool { width: 78px; padding: 6px 5px; border-radius: 8px; }
+  .tool .name { font-size: 12px; }
+  .toast-msg { padding: 10px 22px; font-size: 18px; }
+  .dev-panel { width: min(340px, calc(100vw - 24px)); }
+}
+
+/* 更矮的横屏（如 360×640 手机侧放）：进一步压缩 */
+@media (orientation: landscape) and (max-height: 400px) {
+  .panel { padding: 10px 14px; }
+  .panel h1 { font-size: 19px; letter-spacing: 2px; }
+  .panel .subtitle { margin: 1px 0 7px; font-size: 11px; }
+  .panel input { padding: 8px 10px; margin-bottom: 7px; min-height: 34px; }
+  .panel button { padding: 8px; font-size: 14px; min-height: 34px; }
+  .create-section { margin-top: 6px; }
+  .solo-section { margin-top: 9px; padding-top: 8px; }
+  .solo-label { margin-bottom: 6px; font-size: 12px; }
+  .solo-hint { margin-top: 4px; font-size: 10px; }
+  .section-header { margin: 6px 0 4px; }
+  .lobby-panel .room-list { max-height: 30vh; }
+  .room-item { height: 32px; }
+  .end-panel .end-hider-list { max-height: 22vh; overflow-y: auto; }
+}
+
+/* ==========================================================================
+   触屏设备通用：点击目标放大到 44px，去掉悬停态
+   ========================================================================== */
+@media (pointer: coarse) {
+  .panel button,
+  .role-btn,
+  .solo-btn,
+  .join-btn,
+  #leaveRoomBtn,
+  .hud-btn {
+    min-height: 44px;
+  }
+  .room-item .join-btn { min-height: 34px; min-width: 52px; padding: 6px 10px; font-size: 12px; }
+  .room-item { height: 40px; font-size: 14px; }
+  .panel input { min-height: 44px; font-size: 16px; }  /* ≥16px 防止 iOS 聚焦缩放 */
+  .tool-tip { display: none; }
+  /* 触屏提示保留（底部中央是空白区），缩小并上移避开安全区 */
+  .bottom-hint {
+    font-size: 11px; padding: 5px 12px; max-width: min(560px, 46vw);
+    bottom: calc(8px + var(--sab));
+  }
+  #toast { top: 15%; }
+  .toast-msg { font-size: 19px; padding: 11px 24px; }
+  .hider-score-row .lives-hearts .heart { font-size: 12px; }
+}
+
+/* 矮屏（横屏手机）上 44px 触摸目标反而会挤爆面板，按比例收紧 */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 430px) {
+  .panel button, .role-btn, .solo-btn, #leaveRoomBtn, .hud-btn { min-height: 36px; }
+  .panel input { min-height: 36px; }
+  .room-item { height: 34px; font-size: 13px; }
+}
+
+/* 触屏模式下不显示桌面工具栏（由 JS 保证，这里兜底） */
+body[data-input="touch"] #toolbar { display: none !important; }
+

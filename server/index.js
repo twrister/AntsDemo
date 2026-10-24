@@ -9,6 +9,9 @@ if (savedDefaults) setGlobalDevConfig(savedDefaults);
 
 const MAIN_PORT = Number(process.env.PORT) || 3000;
 const DEBUG_PORT = Number(process.env.DEBUG_PORT) || 3001;
+// Node 不传 host 时监听全部接口（:: / 0.0.0.0），局域网本就可访问；
+// HOST 用于显式收窄绑定范围，例如 HOST=127.0.0.1 只允许本机访问。
+const HOST = process.env.HOST || undefined;
 
 /** 各端口房间表，用于 3001 调参时同步到 3000 进行中对局 */
 const allRoomMaps = [];
@@ -25,6 +28,7 @@ function onGlobalDevConfig(msg) {
 
 createServer({
   port: MAIN_PORT,
+  host: HOST,
   allowDebug: false,
   allowSolo: true,
   defaultPage: 'index.html',
@@ -34,6 +38,7 @@ createServer({
 });
 createServer({
   port: DEBUG_PORT,
+  host: HOST,
   allowDebug: true,
   allowSolo: true,
   defaultPage: 'debug.html',

@@ -1,30 +1,48 @@
 // Canvas 2D 渲染器：绘制蚁群、食物、信息素轨迹、工具效果。
 // 蚂蚁按 5 个特征维度绘制差异 (GDD 3.1)，使搜寻者能用肉眼识别破绽。
+//
+// 坐标约定：所有绘制均使用 CSS 逻辑像素；构造时用 setTransform(dpr, ...) 一次性放大，
+// 因此世界坐标 / 镜头 / 碰撞判定数学与改造前完全一致，只是画面更清晰。
 import { ROLE, GROUND_FILL_DEFAULT } from './const.js';
 
+/** 点击涟漪时长 (ms) */
+const TAP_RIPPLE_MS = 450;
+
 export class Renderer {
-  constructor(canvas) {
+  /**
+   * @param {HTMLCanvasElement} canvas
+   * @param {import('./view.js').viewport} view 视口单例（提供 CSS 尺寸与 DPR）
+   */
+  constructor(canvas, view) {
     this.canvas = canvas;
+    this.view = view;
     this.ctx = canvas.getContext('2d');
     this._cachedPhero = null;  // 信息素快照缓存（服务器每 2 tick 才更新一次）
     this.resize();
-    window.addEventListener('resize', () => this.resize());
   }
 
+  /** 画布后备缓冲随视口 / DPR 变化重设（由 main.js 在 viewport.onChange 中调用） */
   resize() {
-    this.canvas.width = window.innerWidth;
-    this.canvas.height = window.innerHeight;
+    this.view.applyCanvas(this.canvas);
   }
+
+  /** CSS 逻辑宽高（绘制坐标系） */
+  get width() { return this.view.w; }
+  get height() { return this.view.h; }
 
   /**
    * 渲染一帧。
    * @param snap 插值后的世界快照
    * @param cam  镜头 { x, y, zoom } —— 世界坐标中心点
-   * @param opts { role, world, time, viewRadius, lightBeams, sniffBeams, toolPreview, viewport }
+   * @param opts { role, world, time, viewRadius, lightBeams, sniffBeams, toolPreview, viewport, tapMark, quality }
    */
   draw(snap, cam, opts) {
     const ctx = this.ctx;
-    const W = this.canvas.width, H = this.canvas.height;
+    const W = this.width, H = this.height;
+    const dpr = this.view.dpr;
+    const lowQuality = opts.quality === 'low';
+    // 逻辑坐标 → 物理像素（不叠加到 translate，后续按 CSS px 计算）
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
 
     // 更新信息素缓存（服务器不发时复用上一帧）
@@ -95,7 +113,7 @@ export class Renderer {
       this._drawVignette(ctx, W, H, opts.viewRadius);
       // 强光照射可穿透暗角，照亮四角阴暗处（支持多束光）
       for (const beam of lightBeams) {
-        this._drawLightVignetteRelief(ctx, beam, cam, W, H, opts.time);
+        this._drawLightVignetteRelief(ctx, beam, cam, W, H, opts.time, lowQuality);
       }
     }
     // 光束内蚂蚁二次绘制：叠在暗角之上，提升阴暗处辨识度
@@ -116,6 +134,56 @@ export class Renderer {
       }
       ctx.restore();
     }
+
+    // 触屏点击涟漪：确认落点已被识别（相机变换已恢复，用世界→屏幕换算）
+    if (opts.tapMark && !lowQuality) {
+      this._drawTapRipple(ctx, opts.tapMark, cam, opts.time, W / 2, H / 2, zoom);
+    }
+    // 触屏准星：摇杆控制的瞄准点
+    if (opts.crosshair) {
+      this._drawCrosshair(ctx, opts.crosshair, opts.time);
+    }
+  }
+
+  /** 触屏准星：四段弧 + 中心点，轻微呼吸动画 */
+  _drawCrosshair(ctx, ch, time) {
+    const r = ch.r || 22;
+    const pulse = 0.82 + 0.18 * Math.sin(time / 320);
+    ctx.save();
+    ctx.translate(ch.x, ch.y);
+    ctx.strokeStyle = `rgba(255,238,190,${(0.82 * pulse).toFixed(3)})`;
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.arc(0, 0, r, (i * Math.PI) / 2 + 0.32, (i * Math.PI) / 2 + Math.PI / 2 - 0.32);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(0, 0, 2.2, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,246,214,${pulse.toFixed(3)})`;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  /** 触屏点按涟漪：落点扩散圆环，时限 TAP_RIPPLE_MS */
+  _drawTapRipple(ctx, tap, cam, time, cx, cy, zoom) {
+    const age = time - tap.t;
+    if (age < 0 || age > TAP_RIPPLE_MS) return;
+    const t = age / TAP_RIPPLE_MS;
+    const sx = cx + (tap.x - cam.x) * zoom;
+    const sy = cy + (tap.y - cam.y) * zoom;
+    const alpha = (1 - t) * 0.75;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(sx, sy, 10 + t * 26, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,240,190,${alpha.toFixed(3)})`;
+    ctx.lineWidth = 2.5 * (1 - t * 0.5);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,246,214,${(alpha * 0.9).toFixed(3)})`;
+    ctx.fill();
+    ctx.restore();
   }
 
   /** 轨迹残影：按段速度着色，慢速偏蓝、常速偏绿黄、高速偏红 */
@@ -719,8 +787,9 @@ export class Renderer {
 
   /**
    * 强光穿透暗角：用提亮叠层抵消 vignette，避免擦除导致蚂蚁发虚。
+   * @param {boolean} lowQuality 移动端跳过 soft-light 合成层（较贵），只保留 screen 提亮
    */
-  _drawLightVignetteRelief(ctx, beam, cam, W, H, time) {
+  _drawLightVignetteRelief(ctx, beam, cam, W, H, time, lowQuality = false) {
     const zoom = cam.zoom || 1;
     const sx = W / 2 + (beam.x - cam.x) * zoom;
     const sy = H / 2 + (beam.y - cam.y) * zoom;
@@ -738,6 +807,8 @@ export class Renderer {
     ctx.fillStyle = lift;
     ctx.fillRect(0, 0, W, H);
     ctx.restore();
+
+    if (lowQuality) return;
 
     // 暖色光晕，强化被照亮区域
     ctx.save();

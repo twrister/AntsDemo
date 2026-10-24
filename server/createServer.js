@@ -21,6 +21,7 @@ const MIME = {
 /**
  * @param {{
  *   port: number,
+ *   host?: string,
  *   allowDebug?: boolean,
  *   allowSolo?: boolean,
  *   defaultPage?: string,
@@ -33,6 +34,7 @@ const MIME = {
 export function createServer(opts) {
   const {
     port,
+    host = undefined,
     allowDebug = false,
     allowSolo = false,
     defaultPage = 'index.html',
@@ -244,9 +246,9 @@ export function createServer(opts) {
     });
   });
 
-  server.listen(port, () => {
+  server.listen(port, host, () => {
     const suffix = label ? ` (${label})` : '';
-    console.log(`监听 http://localhost:${port}${suffix}`);
+    console.log(`监听 http://${host || 'localhost'}:${port}${suffix}`);
   });
 
   return server;

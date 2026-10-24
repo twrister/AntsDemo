@@ -5,11 +5,18 @@ import { Input } from './input.js';
 import { SeekerController } from './seeker.js';
 import { HiderController } from './hider.js';
 import { ROLE, GROUND_FILL_DEFAULT } from './const.js';
+import {
+  viewport, TOUCH_HINTS, POINTER_HINTS, prepareMobileDisplay,
+} from './view.js';
+import { TouchControls } from './touch.js';
 
 const net = new Net();
 const canvas = document.getElementById('canvas');
-const renderer = new Renderer(canvas);
-const input = new Input(canvas);
+viewport.start();
+const renderer = new Renderer(canvas, viewport);
+const input = new Input(canvas, viewport);
+const touch = new TouchControls({ view: viewport, input });
+touch.build(document.getElementById('game'));
 
 let role = null;
 let myPlayerId = null;
@@ -26,6 +33,8 @@ const $ = (id) => document.getElementById(id);
 
 /** 调试端口页面标记（debug.html 上 data-debug="true"） */
 const DEBUG_MODE = document.body.dataset.debug === 'true';
+/** ?debug=1：竖屏遮罩上显示视口 / 方向诊断信息 */
+const DEBUG_VIEWPORT = new URLSearchParams(location.search).has('debug');
 
 const MATCH_DURATION_MIN = 1;
 const MATCH_DURATION_MAX = 10;
@@ -430,6 +439,11 @@ if (DEBUG_MODE) {
 
   $('devNoCdCheck').addEventListener('change', sendDevConfig);
 
+  // 强制触屏控制：用于桌面 DevTools 验证移动端布局与轮盘手感
+  $('devForceTouch')?.addEventListener('change', (e) => {
+    viewport.setMode(e.target.checked ? 'touch' : null);
+  });
+
   function toggleDevPanel() { $('devPanel').classList.toggle('hidden'); }
   $('devPanelBtn').addEventListener('click', toggleDevPanel);
   $('devClose').addEventListener('click', () => $('devPanel').classList.add('hidden'));
@@ -659,8 +673,8 @@ async function joinRoom(roomId) {
 
 const soloSeekerBtn = $('soloSeekerBtn');
 const soloHiderBtn = $('soloHiderBtn');
-if (soloSeekerBtn) soloSeekerBtn.addEventListener('click', () => startSolo(ROLE.SEEKER));
-if (soloHiderBtn) soloHiderBtn.addEventListener('click', () => startSolo(ROLE.HIDER));
+if (soloSeekerBtn) soloSeekerBtn.addEventListener('click', () => { prepareDisplay(); startSolo(ROLE.SEEKER); });
+if (soloHiderBtn) soloHiderBtn.addEventListener('click', () => { prepareDisplay(); startSolo(ROLE.HIDER); });
 
 async function startSolo(soloRole) {
   await ensureConnected();
@@ -680,7 +694,10 @@ $('readyBtn').addEventListener('click', () => net.send({ type: 'ready' }));
 $('switchSeekerBtn').addEventListener('click', () => net.send({ type: 'switch_role', role: ROLE.SEEKER }));
 $('switchHiderBtn').addEventListener('click', () => net.send({ type: 'switch_role', role: ROLE.HIDER }));
 
-$('startGameBtn').addEventListener('click', () => net.send({ type: 'start_game' }));
+$('startGameBtn').addEventListener('click', () => {
+  prepareDisplay();
+  net.send({ type: 'start_game' });
+});
 
 // ---- 结算 ----
 
@@ -766,14 +783,18 @@ net.on('start', async (m) => {
   $('roleTag').textContent = role === ROLE.SEEKER ? '搜寻者' : '隐藏者';
   $('roleTag').className = 'hud-item ' + (role === ROLE.SEEKER ? 'role-seeker' : 'role-hider');
   if (role === ROLE.SEEKER) {
-    controller = new SeekerController({ canvas, input, net, world });
+    controller = new SeekerController({ canvas, view: viewport, input, net, world });
     $('seekerHint').classList.remove('hidden');
     $('hiderHint').classList.add('hidden');
   } else {
-    controller = new HiderController({ canvas, input, net, world, antId: m.antId });
+    controller = new HiderController({
+      canvas, view: viewport, input, net, world, antId: m.antId, touch,
+    });
     $('seekerHint').classList.add('hidden');
     $('hiderHint').classList.remove('hidden');
   }
+  // 触屏：按角色装载摇杆 / 轮盘
+  touch.setRole(role);
   $('hiderScorePanel').classList.remove('hidden');
   running = true;
   sendDevConfig();
@@ -788,6 +809,7 @@ net.on('end', (m) => {
   running = false;
   controller?.destroy?.();
   controller = null;
+  touch.setRole(null);
   net.clearBuffer();
   const won = m.winner === role;
   $('endTitle').textContent = won ? '胜利！' : '失败';
@@ -809,7 +831,7 @@ function loop(now) {
     const opts = controller.update(snap, dt);
     renderer.draw(snap, opts.cam, {
       ...opts, role, world, time: now, showPheromone, foodActionTime: snap.foodActionTime,
-      soilFill,
+      soilFill, quality: viewport.quality,
     });
     updateHud(snap);
   }
@@ -1044,6 +1066,7 @@ function resetGameUi() {
   controller?.destroy?.();
   controller = null;
   net.clearBuffer();
+  touch.setRole(null);
   $('toolbar').classList.add('hidden');
   $('seekerHint').classList.add('hidden');
   $('hiderHint').classList.add('hidden');
@@ -1057,6 +1080,81 @@ function resetGameUi() {
 function escapeHtml(s) {
   return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
+
+// ---- 设备适配：输入模式与按钮文案 ----
+
+/** 按当前输入模式刷新 body 标记、提示文案与竖屏遮罩状态 */
+function applyInputMode() {
+  const mode = viewport.mode;
+  document.body.dataset.input = mode;
+  document.body.dataset.portrait = viewport.isLandscape ? '0' : '1';
+
+  const hints = mode === 'touch' ? TOUCH_HINTS : POINTER_HINTS;
+  const seekerHint = $('seekerHint');
+  const hiderHint = $('hiderHint');
+  if (seekerHint && hints[ROLE.SEEKER]) seekerHint.textContent = hints[ROLE.SEEKER];
+  // 观战提示由控制器接管，模式切换时不要覆盖
+  if (hiderHint && hints[ROLE.HIDER] && !controller?._spectator) {
+    hiderHint.textContent = hints[ROLE.HIDER];
+  }
+
+  // 视口/DPR 变化后重设画布后备缓冲，并让控制器重算缩放
+  renderer.resize();
+  touch.layout();
+
+  renderRotateNote();
+}
+
+/** 竖屏遮罩文案；?debug=1 时改成实时诊断，便于真机上定位适配问题 */
+function renderRotateNote() {
+  const note = $('rotateNote');
+  if (!note) return;
+  if (DEBUG_VIEWPORT) {
+    const mq = window.matchMedia('(orientation: portrait)').matches ? 'P' : 'L';
+    const de = document.documentElement;
+    const vv = window.visualViewport;
+    const so = window.screen?.orientation?.type || '-';
+    const angle = window.screen?.orientation?.angle ?? '-';
+    note.textContent =
+      `inner ${window.innerWidth}×${window.innerHeight} · doc ${de.clientWidth}×${de.clientHeight}`
+      + ` · vv ${Math.round(vv?.width || 0)}×${Math.round(vv?.height || 0)}`
+      + ` · mq:${mq} · screen:${so}(${angle}) · flag:${document.body.dataset.portrait} · ${viewport.mode}`;
+    return;
+  }
+  note.textContent = running ? '旋转设备后自动适配 · 对局仍在继续' : '旋转设备后自动适配';
+}
+
+viewport.onChange(applyInputMode);
+applyInputMode();
+if (DEBUG_VIEWPORT) setInterval(renderRotateNote, 1000);
+
+// 失焦 / 切后台时释放所有输入，避免蚂蚁"失控"移动
+function releaseInputs() {
+  input.releaseAll();
+  touch.release();
+  if (running && controller && role === ROLE.HIDER) {
+    net.send({ type: 'move', dx: 0, dy: 0 });
+    net.send({ type: 'sprint', active: false });
+  }
+}
+window.addEventListener('blur', releaseInputs);
+document.addEventListener('visibilitychange', () => { if (document.hidden) releaseInputs(); });
+
+// 触屏进入对局前申请全屏 + 横屏锁定（必须发生在用户手势内）
+function prepareDisplay() {
+  try { prepareMobileDisplay(); } catch (_) {}
+}
+
+// ---- 退出对局 ----
+
+$('exitBtn')?.addEventListener('click', () => {
+  if (!running) return;
+  if (!confirm('离开对局返回大厅？对局仍在继续，你的蚂蚁会留在原地。')) return;
+  resetGameUi();
+  net.send({ type: 'leave_room' });
+  showScreen('lobby');
+  showLobbyView('browser');
+});
 
 // ---- 初始化：建立 WS 连接，接收初始房间列表 ----
 ensureConnected();
